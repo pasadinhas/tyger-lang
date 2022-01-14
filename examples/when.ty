@@ -1,0 +1,81 @@
+enum Quadrant {
+    FIRST, SECOND, THIRD, FOURTH
+
+    int number() {
+        return when (this) {
+            FIRST  => 1,
+            SECOND => 2,
+            THIRD  => 3,
+            FOURTH => 4
+        }
+    }
+}
+
+string textRepresentation(Quadrant quadrant) {
+    return when (quadrant) {
+        FIRST  => "1st quadrant",
+        SECOND => "2nd quadrant",
+        THIRD  => "3rd quadrant",
+        FOURTH => "4th quadrant"
+    }
+}
+
+struct Point {
+    int x
+    int y
+
+
+    double length(Point p) {
+        return sqrt(p.x * p.x + p.y * p.y)
+        // or  sqrt(p.x ^ 2 + p.y ^ 2)
+    }
+}
+
+Quadrant? quadrant(Point p) {
+    return when p {
+        {x, y} if x > 0 and y > 0 => Quadrant.FIRST,
+        {x, y} if x < 0 and y > 0 => Quadrant.SECOND,
+        {x, y} if x < 0 and y < 0 => Quadrant.THIRD,
+        {x, y} if x > 0 and y < 0 => Quadrant.FOURTH,
+        _                         => None
+    }
+}
+
+int main() {
+
+    Point point = Point(2, 3)
+
+    print("The point is " + point.length() + " from the origin.")
+
+    when point {
+        {x: 0, y: 0}                => print("The point is the origin."),
+        {x: 0}                      => print("The point is in the y-axis."),
+        {y: 0}                      => print("The point is in the x-axis."),
+        {x, y} if x > 0 and y > 0   => print("The point is in the 1st quadrant."),
+        {x, y} if x < 0 and y > 0   => print("The point is in the 2nd quadrant."),
+        {x, y} if x < 0 and y < 0   => print("The point is in the 3rd quadrant."),
+        {x, y} if x > 0 and y < 0   => print("The point is in the 4th quadrant."),
+        _                           => print("Pretty sure this is impossible, but the compiler should catch that!")
+    }
+
+    when point {
+        {x: 0, y: 0}                            => print("The point is the origin."),
+        {x: 0}                                  => print("The point is in the y-axis."),
+        {y: 0}                                  => print("The point is in the x-axis."),
+        {quadrant: Some(point.quadrant()) }     => print("The point is in the " + quadrant.textRepresentation() + ".")
+        _                                       => print("Never occurs but the compiler doesn't know")
+    }
+
+    when point {
+        {x: 0, y: 0}                            => print("The point is the origin."),
+        {x: 0}                                  => print("The point is in the y-axis."),
+        {y: 0}                                  => print("The point is in the x-axis."),
+        _                                       => when point.quadrant() {
+            Some(quadrant)                          => print("The point is in the " + quadrant.textRepresentation() + ".")
+            None                                    => print("Never occurs but the compiler doesn't know")
+        }
+    }
+
+    return 0
+}
+

@@ -1,0 +1,8 @@
+func int main() {
+    a = 4 + 2
+    a = true
+    b = 10 + if a > 4 {
+        2
+    } else { 3 }
+    b
+}
