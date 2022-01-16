@@ -10,6 +10,7 @@ blockExpression
 expression
    : literalExpression                                                              # LiteralExpression_
    | identifier                                                                     # IdentifierExpression
+   | 'while' condition=expression blockExpression                                   # WhileExpression
    | blockExpression                                                                # GroupedExpression 
    | '(' expression ')'                                                             # GroupedExpression 
    | op=('-' | 'not') expression                                                    # PrefixUnaryExpression

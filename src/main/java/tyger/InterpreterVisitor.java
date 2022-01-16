@@ -16,6 +16,7 @@ import tyger.TygerParser.LiteralExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
 import tyger.TygerParser.ProgContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
+import tyger.TygerParser.WhileExpressionContext;
 
 public class InterpreterVisitor extends TygerBaseVisitor<Object> {
 
@@ -25,7 +26,7 @@ public class InterpreterVisitor extends TygerBaseVisitor<Object> {
             return "None";
         }
     }
-    
+
     private static final None NoneLiteral = new None();
     private final Map<String, Object> variables = new HashMap<>();
 
@@ -134,5 +135,14 @@ public class InterpreterVisitor extends TygerBaseVisitor<Object> {
         variables.put(variableName, value);
         
         return value;
+    }
+
+    @Override
+    public Object visitWhileExpression(WhileExpressionContext ctx) {
+        Object result = NoneLiteral;
+        while ((Boolean) ctx.condition.accept(this)) {
+            result = ctx.blockExpression().accept(this);
+        }
+        return result;
     }
 }

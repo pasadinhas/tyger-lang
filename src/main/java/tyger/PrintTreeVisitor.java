@@ -10,6 +10,7 @@ import tyger.TygerParser.LiteralExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
 import tyger.TygerParser.ProgContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
+import tyger.TygerParser.WhileExpressionContext;
 
 public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
 
@@ -149,6 +150,21 @@ public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
         outdent();
         write("</VariableDeclaration>");
 
+        return builder;
+    }
+
+    @Override
+    public StringBuilder visitWhileExpression(WhileExpressionContext ctx) {
+        write("<While>");
+        indent();
+            write("<Condition>");
+            indent();
+            ctx.condition.accept(this);
+            outdent();
+            write("</Condition>");
+            ctx.blockExpression().accept(this);
+        outdent();
+        write("</While>");
         return builder;
     }
 }

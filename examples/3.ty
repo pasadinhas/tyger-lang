@@ -6,4 +6,12 @@ func int main() {
     
     int? age = None
     age = age + 1
+
+    int factOf = 6
+    int result = 1
+    while factOf > 0 {
+        result = result * factOf
+        factOf = factOf - 1
+        result
+    }
 }

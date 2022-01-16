@@ -16,6 +16,7 @@ import tyger.TygerParser.LiteralExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
 import tyger.TygerParser.ProgContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
+import tyger.TygerParser.WhileExpressionContext;
 
 public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
@@ -251,5 +252,14 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     private <T> T compiler_error(String format, Object... args) {
         throw new RuntimeException(String.format(format, args));
     }
+
+    public Type visitWhileExpression(WhileExpressionContext ctx) {
+        Type conditionType = ctx.condition.accept(this);
+        if (!conditionType.equals(Type.BOOLEAN)) {
+            throw new RuntimeException("Condition of while expression must be a boolean. Got: " + conditionType);
+        }
+
+        return ctx.blockExpression().accept(this).toOptional(); // while loop can return optionally if the condition never triggers.
+    };
 
 }
