@@ -37,14 +37,19 @@ ifExpression
 identifier : IDENTIFIER;
 
 typeIdentifier 
-    : 'int'
-    | 'bool'
+    : 'int' '?'?
+    | 'bool' '?'?
     ;
 
 literalExpression
    : INTEGER_LITERAL
    | BOOLEAN_LITERAL
+   | NONE_LITERAL
    ;
+
+NONE_LITERAL
+    : 'None'
+    ;
 
 INTEGER_LITERAL 
     : DEC_LITERAL 

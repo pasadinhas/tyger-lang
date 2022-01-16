@@ -22,39 +22,89 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     private static final Logger logger = LoggerFactory.getLogger(TypeCheckVisitor.class);
 
     public static enum Type {
-        INTEGER, BOOLEAN, 
+        INTEGER, 
+        OPTIONAL_INTEGER,
+        BOOLEAN,
+        OPTIONAL_BOOLEAN,
+        OPTIONAL_ANY; // used internally as the type of 'None'. Must be coerced to other optional types.
+
+        Type toOptional() {
+            return switch(this) {
+                case OPTIONAL_ANY, OPTIONAL_BOOLEAN, OPTIONAL_INTEGER -> this;
+                case INTEGER -> OPTIONAL_INTEGER;
+                case BOOLEAN -> OPTIONAL_BOOLEAN;
+            };
+        }
+
+        Type toNonOptional() {
+            return switch(this) {
+                case OPTIONAL_ANY -> throw new RuntimeException(String.format("Cannot convert %s to non-optional.", OPTIONAL_ANY));
+                case INTEGER, BOOLEAN -> this;
+                case OPTIONAL_INTEGER -> INTEGER;
+                case OPTIONAL_BOOLEAN -> BOOLEAN;
+            };
+        }
+
+        boolean isOptional() {
+            return this.name().toLowerCase().startsWith("optional");
+        }
+
+        boolean isAssignableFrom(Type other) {
+            return this.equals(other) || this.isOptional() && (other.equals(OPTIONAL_ANY) || this.toNonOptional().equals(other));
+        }
     }
 
     private static final record PrefixUnaryOperation(String operator, Type type) {}
     private static final Map<PrefixUnaryOperation, Type> VALID_PREFIX_UNARY_OPERATIONS = Map.ofEntries(
         Map.entry(new PrefixUnaryOperation("-", Type.INTEGER), Type.INTEGER),
-        Map.entry(new PrefixUnaryOperation("not", Type.BOOLEAN), Type.BOOLEAN)
+        Map.entry(new PrefixUnaryOperation("-", Type.OPTIONAL_INTEGER), Type.OPTIONAL_INTEGER),
+        Map.entry(new PrefixUnaryOperation("not", Type.BOOLEAN), Type.BOOLEAN),
+        Map.entry(new PrefixUnaryOperation("not", Type.OPTIONAL_BOOLEAN), Type.OPTIONAL_BOOLEAN)
     );
 
     private static final record BinaryOperation(String operator, Type left, Type right) {}
     
-    private static final Map<BinaryOperation, Type> VALID_BINARY_OPERATIONS = Map.ofEntries(
-        Map.entry(new BinaryOperation("+", Type.INTEGER, Type.INTEGER), Type.INTEGER),
-        Map.entry(new BinaryOperation("-", Type.INTEGER, Type.INTEGER), Type.INTEGER),
-        Map.entry(new BinaryOperation("/", Type.INTEGER, Type.INTEGER), Type.INTEGER),
-        Map.entry(new BinaryOperation("*", Type.INTEGER, Type.INTEGER), Type.INTEGER),
-        Map.entry(new BinaryOperation("%", Type.INTEGER, Type.INTEGER), Type.INTEGER),
-        Map.entry(new BinaryOperation("^", Type.INTEGER, Type.INTEGER), Type.INTEGER),
-        Map.entry(new BinaryOperation(">>", Type.INTEGER, Type.INTEGER), Type.INTEGER),
-        Map.entry(new BinaryOperation("<<", Type.INTEGER, Type.INTEGER), Type.INTEGER),
-        Map.entry(new BinaryOperation("|", Type.INTEGER, Type.INTEGER), Type.INTEGER),
-        Map.entry(new BinaryOperation("&", Type.INTEGER, Type.INTEGER), Type.INTEGER),
-        Map.entry(new BinaryOperation("and", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN),
-        Map.entry(new BinaryOperation("or", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN),
-        Map.entry(new BinaryOperation("==", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN),
-        Map.entry(new BinaryOperation("==", Type.INTEGER, Type.INTEGER), Type.BOOLEAN),
-        Map.entry(new BinaryOperation("!=", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN),
-        Map.entry(new BinaryOperation("!=", Type.INTEGER, Type.INTEGER), Type.BOOLEAN),
-        Map.entry(new BinaryOperation(">=", Type.INTEGER, Type.INTEGER), Type.BOOLEAN),
-        Map.entry(new BinaryOperation(">", Type.INTEGER, Type.INTEGER), Type.BOOLEAN),
-        Map.entry(new BinaryOperation("<=", Type.INTEGER, Type.INTEGER), Type.BOOLEAN),
-        Map.entry(new BinaryOperation("<", Type.INTEGER, Type.INTEGER), Type.BOOLEAN)
-    );
+    private static final Map<BinaryOperation, Type> VALID_BINARY_OPERATIONS = new HashMap<>();
+
+    static {
+        // Add operations without OPTIONAL types.
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("+", Type.INTEGER, Type.INTEGER), Type.INTEGER);        
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("-", Type.INTEGER, Type.INTEGER), Type.INTEGER);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("/", Type.INTEGER, Type.INTEGER), Type.INTEGER);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("*", Type.INTEGER, Type.INTEGER), Type.INTEGER);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("%", Type.INTEGER, Type.INTEGER), Type.INTEGER);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("^", Type.INTEGER, Type.INTEGER), Type.INTEGER);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation(">>", Type.INTEGER, Type.INTEGER), Type.INTEGER);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("<<", Type.INTEGER, Type.INTEGER), Type.INTEGER);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("|", Type.INTEGER, Type.INTEGER), Type.INTEGER);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("&", Type.INTEGER, Type.INTEGER), Type.INTEGER);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("and", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("or", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("==", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("==", Type.INTEGER, Type.INTEGER), Type.BOOLEAN);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("!=", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("!=", Type.INTEGER, Type.INTEGER), Type.BOOLEAN);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation(">=", Type.INTEGER, Type.INTEGER), Type.BOOLEAN);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation(">", Type.INTEGER, Type.INTEGER), Type.BOOLEAN);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("<=", Type.INTEGER, Type.INTEGER), Type.BOOLEAN);
+        VALID_BINARY_OPERATIONS.put(new BinaryOperation("<", Type.INTEGER, Type.INTEGER), Type.BOOLEAN);
+
+        // Add operations with OPTIONAL types.
+        Map<BinaryOperation, Type> optionalBinaryOperations = new HashMap<>();
+        VALID_BINARY_OPERATIONS.entrySet().forEach(entry -> {
+            BinaryOperation operation = entry.getKey();
+            String op = operation.operator();
+            Type left = operation.left();
+            Type right = operation.right();
+            Type result = entry.getValue();
+
+            optionalBinaryOperations.put(new BinaryOperation(op, left.toOptional(), right), result.toOptional());
+            optionalBinaryOperations.put(new BinaryOperation(op, left, right.toOptional()), result.toOptional());
+            optionalBinaryOperations.put(new BinaryOperation(op, left.toOptional(), right.toOptional()), result.toOptional());
+        });
+
+        VALID_BINARY_OPERATIONS.putAll(optionalBinaryOperations);
+    }
 
     private Map<String, Type> variables = new HashMap<>();
 
@@ -113,6 +163,8 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
             return Type.INTEGER;
         } else if (ctx.BOOLEAN_LITERAL() != null) {
             return Type.BOOLEAN;
+        } else if (ctx.NONE_LITERAL() != null) {
+            return Type.OPTIONAL_ANY;
         }
         throw new RuntimeException("Could not detect type of token: " + ctx.getText());
     }
@@ -134,14 +186,14 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
             compiler_error("Cannot assign to undeclared variable '%s'", variableName);    
         }
 
-        Type previousType = variables.get(variableName);
-        Type type = ctx.expression().accept(this);
+        Type declaredType = variables.get(variableName);
+        Type assignedType = ctx.expression().accept(this);
 
-        if (type.equals(previousType)) {
-            return type;
-        } else {
-            return compiler_error("Cannot assign value of type %s to variable '%s' of type %s", type, variableName, previousType);
-        }
+        if (!declaredType.isAssignableFrom(assignedType)) {
+            return compiler_error("Cannot assign value of type %s to variable '%s' of type %s", assignedType, variableName, declaredType);
+        } 
+
+        return declaredType;
     }
 
     @Override
@@ -168,7 +220,9 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
     private static final Map<String, Type> TYPE_MAP = Map.of(
         "int", Type.INTEGER,
-        "bool", Type.BOOLEAN
+        "int?", Type.OPTIONAL_INTEGER,
+        "bool", Type.BOOLEAN,
+        "bool?", Type.OPTIONAL_BOOLEAN
     );
 
     @Override
@@ -186,7 +240,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         Type declaredType = TYPE_MAP.get(declaredTypeStr);
         Type expressionType = ctx.expression().accept(this);
 
-        if (!declaredType.equals(expressionType)) {
+        if (!declaredType.isAssignableFrom(expressionType)) {
             compiler_error("Cannot assign value of type %s to variable '%s' of type %s.", expressionType, variableName, declaredType);
         }
 
@@ -197,4 +251,5 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     private <T> T compiler_error(String format, Object... args) {
         throw new RuntimeException(String.format(format, args));
     }
+
 }

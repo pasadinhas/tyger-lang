@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
 
 import tyger.TygerParser.AssignmentExpressionContext;
 import tyger.TygerParser.BinaryExpressionContext;
@@ -18,6 +19,14 @@ import tyger.TygerParser.VariableDeclarationExpressionContext;
 
 public class InterpreterVisitor extends TygerBaseVisitor<Object> {
 
+    private static class None {
+        @Override
+        public String toString() {
+            return "None";
+        }
+    }
+    
+    private static final None NoneLiteral = new None();
     private final Map<String, Object> variables = new HashMap<>();
 
     @Override
@@ -45,24 +54,31 @@ public class InterpreterVisitor extends TygerBaseVisitor<Object> {
 
     @Override
     public Object visitBinaryExpression(BinaryExpressionContext ctx) {
+        Object left = ctx.left.accept(this);
+        Object right = ctx.right.accept(this);
+
+        if (left.equals(NoneLiteral) || right.equals(NoneLiteral)) {
+            return NoneLiteral;
+        }
+
         return switch (ctx.op.getText()) {
-            case "+" -> (Long) ctx.left.accept(this) + (Long) ctx.right.accept(this);
-            case "-" -> (Long) ctx.left.accept(this) - (Long) ctx.right.accept(this);
-            case "/" -> (Long) ctx.left.accept(this) / (Long) ctx.right.accept(this);
-            case "*" -> (Long) ctx.left.accept(this) * (Long) ctx.right.accept(this);
-            case "%" -> (Long) ctx.left.accept(this) % (Long) ctx.right.accept(this);
-            case "|" -> (Long) ctx.left.accept(this) | (Long) ctx.right.accept(this);
-            case "&" -> (Long) ctx.left.accept(this) & (Long) ctx.right.accept(this);
-            case ">>" -> (Long) ctx.left.accept(this) >> (Long) ctx.right.accept(this);
-            case "<<" -> (Long) ctx.left.accept(this) << (Long) ctx.right.accept(this);
-            case "and" -> (Boolean) ctx.left.accept(this) && (Boolean) ctx.right.accept(this);
-            case "or" -> (Boolean) ctx.left.accept(this) || (Boolean) ctx.right.accept(this);
-            case "==" -> ctx.left.accept(this).equals(ctx.right.accept(this));
-            case "!=" -> !ctx.left.accept(this).equals(ctx.right.accept(this));
-            case ">" -> (Long) ctx.left.accept(this) > (Long) ctx.right.accept(this);
-            case ">=" -> (Long) ctx.left.accept(this) >= (Long) ctx.right.accept(this);
-            case "<=" -> (Long) ctx.left.accept(this) <= (Long) ctx.right.accept(this);
-            case "<" -> (Long) ctx.left.accept(this) < (Long) ctx.right.accept(this);
+            case "+" -> (Long) left + (Long) right;
+            case "-" -> (Long) left - (Long) right;
+            case "/" -> (Long) left / (Long) right;
+            case "*" -> (Long) left * (Long) right;
+            case "%" -> (Long) left % (Long) right;
+            case "|" -> (Long) left | (Long) right;
+            case "&" -> (Long) left & (Long) right;
+            case ">>" -> (Long) left >> (Long) right;
+            case "<<" -> (Long) left << (Long) right;
+            case "and" -> (Boolean) left && (Boolean) right;
+            case "or" -> (Boolean) left || (Boolean) right;
+            case "==" -> left.equals(right);
+            case "!=" -> !left.equals(right);
+            case ">" -> (Long) left > (Long) right;
+            case ">=" -> (Long) left >= (Long) right;
+            case "<=" -> (Long) left <= (Long) right;
+            case "<" -> (Long) left < (Long) right;
             default -> throw new RuntimeException("Binary operator " + ctx.op.getText() + " is not implemented.");
         };
     }
@@ -73,6 +89,8 @@ public class InterpreterVisitor extends TygerBaseVisitor<Object> {
             return Long.valueOf(ctx.getText());
         } else if (ctx.BOOLEAN_LITERAL() != null) {
             return Boolean.valueOf(ctx.getText());
+        } else if (ctx.NONE_LITERAL() != null) {
+            return NoneLiteral;
         }
 
         throw new IllegalStateException("Cannot get value for Literal: " + ctx.getText());

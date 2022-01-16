@@ -3,5 +3,7 @@ func int main() {
     int b = 10 + if a > 4 {
         2
     } else { 3 }
-    b
+    
+    int? age = None
+    age = age + 1
 }
