@@ -1,12 +1,10 @@
 func int main() {
     int a = 4 + 2
-    int b = 10 + if a > 4 {
-        2
-    } else { 3 }
+    int b = 10 + if a > 4 {2} else {3}
     
     int? age = None
-    age = age + 1
-
+    age = 25 + (2 + true)
+    
     int factOf = 6
     int result = 1
     while factOf > 0 {

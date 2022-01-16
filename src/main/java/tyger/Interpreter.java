@@ -46,7 +46,7 @@ public class Interpreter {
         final StringBuilder xml = prog.accept(new PrintTreeVisitor());
         logger.info("XML Parse Tree: \n{}", xml.toString());
 
-        final Object resultType = prog.accept(new TypeCheckVisitor());
+        final Object resultType = prog.accept(new TypeCheckVisitor(source));
         logger.info("Output type: {}", resultType);
         final Object result = prog.accept(new InterpreterVisitor());
         logger.info("Output:\n{}", result);

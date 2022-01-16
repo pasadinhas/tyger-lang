@@ -3,6 +3,7 @@ package tyger;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.antlr.v4.runtime.ParserRuleContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +21,9 @@ import tyger.TygerParser.VariableDeclarationExpressionContext;
 import tyger.TygerParser.WhileExpressionContext;
 
 public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
+
+    private static final int COMPILER_ERROR_LINES_AROUND = 5;
+    private static final String COMPILER_ERROR_LINE_PROMPT = "> ";
 
     private static final Logger logger = LoggerFactory.getLogger(TypeCheckVisitor.class);
 
@@ -120,7 +124,12 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         VALID_BINARY_OPERATIONS.putAll(optionalBinaryOperations);
     }
 
+    private String source;
     private Map<String, Type> variables = new HashMap<>();
+
+    public TypeCheckVisitor(String source) {
+        this.source = source;
+    }
 
     @Override
     public Type visitProg(ProgContext ctx) {
@@ -136,14 +145,6 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         return last;
     }
 
-    private Type error_binaryOperatorNotApplicable(BinaryOperation operation) {
-        throw new RuntimeException("Operator '" + operation.operator + "' is not applicable to types: " + operation.left + " and " + operation.right);
-    }
-
-    private Type error_prefixUnaryOperatorNotApplicable(PrefixUnaryOperation operation) {
-        throw new RuntimeException("Prefix unary operator '" + operation.operator + "' is not applicable to type: " + operation.type);
-    }
-
     @Override
     public Type visitPrefixUnaryExpression(PrefixUnaryExpressionContext ctx) {
         PrefixUnaryOperation operation = new PrefixUnaryOperation(ctx.op.getText(), ctx.expression().accept(this));
@@ -152,14 +153,14 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
             return VALID_PREFIX_UNARY_OPERATIONS.get(operation);
         }
 
-        return error_prefixUnaryOperatorNotApplicable(operation);
+        return compiler_error(ctx, "Prefix unary operator '%s' is not applicable to type: %s", operation.operator, operation.type);
     }
 
     public Type visitPostfixUnaryExpression(PostfixUnaryExpressionContext ctx) {
         PostfixUnaryOperation operation = new PostfixUnaryOperation(ctx.op.getText(), ctx.expression().accept(this));
 
         if (!VALID_POSTFIX_UNARY_OPERATIONS.containsKey(operation)) {
-            return compiler_error("Postfix unary operator '%s' is not applicable to type: %s", operation.operator, operation.type);
+            return compiler_error(ctx, "Postfix unary operator '%s' is not applicable to type: %s", operation.operator, operation.type);
         }
         
         return VALID_POSTFIX_UNARY_OPERATIONS.get(operation);
@@ -167,13 +168,19 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
     @Override
     public Type visitBinaryExpression(BinaryExpressionContext ctx) {
+        logger.debug(
+            "Binary Expression: {} | Start: {line: {}, col: {}} | End: {line: {}, col: {}}",
+            ctx.getText(), 
+            ctx.start.getLine(), ctx.start.getCharPositionInLine(),
+            ctx.stop.getLine(), ctx.stop.getCharPositionInLine()
+        );
         BinaryOperation operation = new BinaryOperation(ctx.op.getText(), ctx.left.accept(this), ctx.right.accept(this));
 
         if (VALID_BINARY_OPERATIONS.containsKey(operation)) {
             return VALID_BINARY_OPERATIONS.get(operation);
         }
 
-        return error_binaryOperatorNotApplicable(operation);
+        return compiler_error(ctx, "Operator %s is not applicable to types: %s and %s", operation.operator, operation.left, operation.right);
     }
 
     @Override
@@ -190,6 +197,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         } else if (ctx.NONE_LITERAL() != null) {
             return Type.OPTIONAL_ANY;
         }
+
         throw new RuntimeException("Could not detect type of token: " + ctx.getText());
     }
 
@@ -200,21 +208,21 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
             return variables.get(variableName);
         }
 
-        throw new RuntimeException("Undefined variable: " + variableName);
+        return compiler_error(ctx, "Undefined variable: %s", variableName);
     }
 
     @Override
     public Type visitAssignmentExpression(AssignmentExpressionContext ctx) {
         String variableName = ctx.identifier().getText();
         if (!variables.containsKey(variableName)) {
-            compiler_error("Cannot assign to undeclared variable '%s'", variableName);    
+            compiler_error(ctx, "Cannot assign to undeclared variable '%s'", variableName);    
         }
 
         Type declaredType = variables.get(variableName);
         Type assignedType = ctx.expression().accept(this);
 
         if (!declaredType.isAssignableFrom(assignedType)) {
-            return compiler_error("Cannot assign value of type %s to variable '%s' of type %s", assignedType, variableName, declaredType);
+            return compiler_error(ctx, "Cannot assign value of type %s to variable '%s' of type %s", assignedType, variableName, declaredType);
         } 
 
         return declaredType;
@@ -224,7 +232,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     public Type visitIfExpression(IfExpressionContext ctx) {
         Type conditionType = ctx.condition.accept(this);
         if (!conditionType.equals(Type.BOOLEAN)) {
-            throw new RuntimeException("Condition of if expression must be a boolean. Got: " + conditionType);
+            compiler_error(ctx.condition, "Condition of if expression must be a boolean. Got: %s", conditionType);
         }
 
         Type blockType = ctx.block.accept(this);
@@ -233,10 +241,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
             : ctx.elseBlock.accept(this);
 
         if (!elseType.equals(blockType)) {
-            throw new RuntimeException(String.format(
-                "If expression must return the same type in all branches. Got %s and %s",
-                blockType, elseType
-            ));
+            return compiler_error(ctx, "If expression must return the same type in all branches. Got %s and %s", blockType, elseType);
         }
 
         return blockType;
@@ -253,33 +258,70 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     public Type visitVariableDeclarationExpression(VariableDeclarationExpressionContext ctx) {
         String variableName = ctx.identifier().getText();
         if (variables.containsKey(variableName)) {
-            compiler_error("Variable '%s' has already been declared.", variableName);
+            compiler_error(ctx, "Variable '%s' has already been declared.", variableName);
         }
 
         String declaredTypeStr = ctx.typeIdentifier().getText();
         if (!TYPE_MAP.containsKey(declaredTypeStr)) {
-            compiler_error("Variable '%s' is being declared with an undefined type: %s", variableName, declaredTypeStr);
+            compiler_error(ctx, "Variable '%s' is being declared with an undefined type: %s", variableName, declaredTypeStr);
         }
 
         Type declaredType = TYPE_MAP.get(declaredTypeStr);
         Type expressionType = ctx.expression().accept(this);
 
         if (!declaredType.isAssignableFrom(expressionType)) {
-            compiler_error("Cannot assign value of type %s to variable '%s' of type %s.", expressionType, variableName, declaredType);
+            compiler_error(ctx, "Cannot assign value of type %s to variable '%s' of type %s.", expressionType, variableName, declaredType);
         }
 
         variables.put(variableName, declaredType);
         return declaredType;
     }
 
-    private <T> T compiler_error(String format, Object... args) {
+    private <T> T compiler_error(ParserRuleContext ctx, String format, Object... args) {
+        int lineNumber = ctx.start.getLine();
+        String[] sourceCodeLines = source.split("\n");
+        String sourceCodeLine = sourceCodeLines[lineNumber - 1];
+        
+        int startCharPosition = ctx.start.getCharPositionInLine();
+        int endCharPosition = ctx.stop.getLine() == lineNumber
+            ? Math.min(ctx.stop.getCharPositionInLine() + ctx.stop.getText().length(), sourceCodeLine.length())
+            : sourceCodeLine.length();
+
+        StringBuilder errorMessage = new StringBuilder("\n\n")
+                .append("Compiler error [")
+                .append(lineNumber)
+                .append(",")
+                .append(startCharPosition)
+                .append("]: ")
+                .append(String.format(format, args))
+                .append("\n\n");
+
+        int startLine = Math.max(1, lineNumber - COMPILER_ERROR_LINES_AROUND);
+        int endLine = Math.min(sourceCodeLines.length, lineNumber + COMPILER_ERROR_LINES_AROUND);
+
+        for (int line = startLine; line <= endLine; line++) {
+            errorMessage.append(COMPILER_ERROR_LINE_PROMPT);
+            errorMessage.append(sourceCodeLines[line - 1]).append('\n');
+            if (line == lineNumber) {
+                for (int i = 0; i < COMPILER_ERROR_LINE_PROMPT.length(); i++) {
+                    errorMessage.append(' ');
+                }
+                for (int i = 0; i < endCharPosition; i++) {
+                    errorMessage.append(i < startCharPosition ? ' ' : '^');
+                }
+                errorMessage.append('\n');
+            }
+        }
+
+        logger.error("{}", errorMessage);
+        
         throw new RuntimeException(String.format(format, args));
     }
 
     public Type visitWhileExpression(WhileExpressionContext ctx) {
         Type conditionType = ctx.condition.accept(this);
         if (!conditionType.equals(Type.BOOLEAN)) {
-            throw new RuntimeException("Condition of while expression must be a boolean. Got: " + conditionType);
+            compiler_error(ctx.condition, "Condition of while expression must be a boolean. Got: %s", conditionType);
         }
 
         return ctx.blockExpression().accept(this).toOptional(); // while loop can return optionally if the condition never triggers.
