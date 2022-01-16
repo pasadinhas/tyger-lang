@@ -10,8 +10,6 @@ func int main() {
     int factOf = 6
     int result = 1
     while factOf > 0 {
-        result = result * factOf
-        factOf = factOf - 1
-        result
+        result = result * factOf--
     }
 }

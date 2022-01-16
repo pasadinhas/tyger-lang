@@ -13,7 +13,8 @@ expression
    | 'while' condition=expression blockExpression                                   # WhileExpression
    | blockExpression                                                                # GroupedExpression 
    | '(' expression ')'                                                             # GroupedExpression 
-   | op=('-' | 'not') expression                                                    # PrefixUnaryExpression
+   | expression op=('--' | '++')                                                    # PostfixUnaryExpression
+   | op=('-' | 'not' | '--' | '++') expression                                      # PrefixUnaryExpression
    | left=expression op=('*' | '/' | '%') right=expression                          # BinaryExpression 
    | left=expression op=('+' | '-') right=expression                                # BinaryExpression 
    | left=expression op=('>>' | '<<') right=expression                              # BinaryExpression 

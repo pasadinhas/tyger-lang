@@ -13,6 +13,7 @@ import tyger.TygerParser.GroupedExpressionContext;
 import tyger.TygerParser.IdentifierExpressionContext;
 import tyger.TygerParser.IfExpressionContext;
 import tyger.TygerParser.LiteralExpressionContext;
+import tyger.TygerParser.PostfixUnaryExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
 import tyger.TygerParser.ProgContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
@@ -46,10 +47,49 @@ public class InterpreterVisitor extends TygerBaseVisitor<Object> {
 
     @Override
     public Object visitPrefixUnaryExpression(PrefixUnaryExpressionContext ctx) {
+        Object expressionValue = ctx.expression().accept(this);
+        if (expressionValue.equals(NoneLiteral)) {
+            return expressionValue;
+        } 
+
         return switch (ctx.op.getText()) {
-            case "-" -> -(Long) ctx.expression().accept(this);
-            case "not" -> !(Boolean) ctx.expression().accept(this);
+            case "-" -> - (Long) expressionValue;
+            case "not" -> !(Boolean) expressionValue;
+            case "++", "--" -> {
+                Long value = (Long) expressionValue;
+                Long result = ctx.op.getText().equals("++") ? value + 1 : value - 1;
+
+                if (ctx.expression() instanceof IdentifierExpressionContext identifierCtx) {
+                    String variableName = identifierCtx.identifier().getText();
+                    variables.put(variableName, result);
+                }
+
+                yield result;
+            }
             default -> throw new RuntimeException("Prefix unary operator " + ctx.op.getText() + " is not implemented.");
+        };
+    }
+
+    @Override
+    public Object visitPostfixUnaryExpression(PostfixUnaryExpressionContext ctx) {
+        Object expressionValue = ctx.expression().accept(this);
+        if (expressionValue.equals(NoneLiteral)) {
+            return expressionValue;
+        } 
+        
+        return switch (ctx.op.getText()) {
+            case "++", "--" -> {
+                Long value = (Long) expressionValue;
+                Long result = ctx.op.getText().equals("++") ? value + 1 : value - 1;
+
+                if (ctx.expression() instanceof IdentifierExpressionContext identifierCtx) {
+                    String variableName = identifierCtx.identifier().getText();
+                    variables.put(variableName, result);
+                }
+
+                yield value;
+            }
+            default -> throw new RuntimeException("Postfix unary operator " + ctx.op.getText() + " is not implemented.");
         };
     }
 

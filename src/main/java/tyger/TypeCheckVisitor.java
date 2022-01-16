@@ -13,6 +13,7 @@ import tyger.TygerParser.GroupedExpressionContext;
 import tyger.TygerParser.IdentifierExpressionContext;
 import tyger.TygerParser.IfExpressionContext;
 import tyger.TygerParser.LiteralExpressionContext;
+import tyger.TygerParser.PostfixUnaryExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
 import tyger.TygerParser.ProgContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
@@ -59,8 +60,20 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     private static final Map<PrefixUnaryOperation, Type> VALID_PREFIX_UNARY_OPERATIONS = Map.ofEntries(
         Map.entry(new PrefixUnaryOperation("-", Type.INTEGER), Type.INTEGER),
         Map.entry(new PrefixUnaryOperation("-", Type.OPTIONAL_INTEGER), Type.OPTIONAL_INTEGER),
+        Map.entry(new PrefixUnaryOperation("--", Type.INTEGER), Type.INTEGER),
+        Map.entry(new PrefixUnaryOperation("--", Type.OPTIONAL_INTEGER), Type.OPTIONAL_INTEGER),
+        Map.entry(new PrefixUnaryOperation("++", Type.INTEGER), Type.INTEGER),
+        Map.entry(new PrefixUnaryOperation("++", Type.OPTIONAL_INTEGER), Type.OPTIONAL_INTEGER),
         Map.entry(new PrefixUnaryOperation("not", Type.BOOLEAN), Type.BOOLEAN),
         Map.entry(new PrefixUnaryOperation("not", Type.OPTIONAL_BOOLEAN), Type.OPTIONAL_BOOLEAN)
+    );
+
+    private static final record PostfixUnaryOperation(String operator, Type type) {}
+    private static final Map<PostfixUnaryOperation, Type> VALID_POSTFIX_UNARY_OPERATIONS = Map.ofEntries(
+        Map.entry(new PostfixUnaryOperation("--", Type.INTEGER), Type.INTEGER),
+        Map.entry(new PostfixUnaryOperation("--", Type.OPTIONAL_INTEGER), Type.OPTIONAL_INTEGER),
+        Map.entry(new PostfixUnaryOperation("++", Type.INTEGER), Type.INTEGER),
+        Map.entry(new PostfixUnaryOperation("++", Type.OPTIONAL_INTEGER), Type.OPTIONAL_INTEGER)
     );
 
     private static final record BinaryOperation(String operator, Type left, Type right) {}
@@ -141,6 +154,16 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
         return error_prefixUnaryOperatorNotApplicable(operation);
     }
+
+    public Type visitPostfixUnaryExpression(PostfixUnaryExpressionContext ctx) {
+        PostfixUnaryOperation operation = new PostfixUnaryOperation(ctx.op.getText(), ctx.expression().accept(this));
+
+        if (!VALID_POSTFIX_UNARY_OPERATIONS.containsKey(operation)) {
+            return compiler_error("Postfix unary operator '%s' is not applicable to type: %s", operation.operator, operation.type);
+        }
+        
+        return VALID_POSTFIX_UNARY_OPERATIONS.get(operation);
+    };
 
     @Override
     public Type visitBinaryExpression(BinaryExpressionContext ctx) {

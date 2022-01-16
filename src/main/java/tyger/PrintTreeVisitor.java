@@ -7,6 +7,7 @@ import tyger.TygerParser.GroupedExpressionContext;
 import tyger.TygerParser.IdentifierExpressionContext;
 import tyger.TygerParser.IfExpressionContext;
 import tyger.TygerParser.LiteralExpressionContext;
+import tyger.TygerParser.PostfixUnaryExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
 import tyger.TygerParser.ProgContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
@@ -84,6 +85,17 @@ public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
         ctx.expression().accept(this);
         outdent();
         write("</PrefixUnaryExpression>");
+        
+        return builder;
+    }
+
+    @Override
+    public StringBuilder visitPostfixUnaryExpression(PostfixUnaryExpressionContext ctx) {
+        write("<PostfixUnaryExpression operator=\"%s\">", ctx.op.getText());
+        indent();
+        ctx.expression().accept(this);
+        outdent();
+        write("</PostfixUnaryExpression>");
         
         return builder;
     }
