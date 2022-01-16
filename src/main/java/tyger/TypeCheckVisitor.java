@@ -2,7 +2,6 @@ package tyger;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,75 +9,79 @@ import org.slf4j.LoggerFactory;
 import tyger.TygerParser.AssignmentExpressionContext;
 import tyger.TygerParser.BinaryExpressionContext;
 import tyger.TygerParser.BlockExpressionContext;
-import tyger.TygerParser.ExpressionContext;
 import tyger.TygerParser.GroupedExpressionContext;
 import tyger.TygerParser.IdentifierExpressionContext;
 import tyger.TygerParser.IfExpressionContext;
 import tyger.TygerParser.LiteralExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
 import tyger.TygerParser.ProgContext;
+import tyger.TygerParser.VariableDeclarationExpressionContext;
 
-public class TypeCheckVisitor extends TygerBaseVisitor<Class<?>> {
+public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
     private static final Logger logger = LoggerFactory.getLogger(TypeCheckVisitor.class);
 
-    private static final record PrefixUnaryOperation(String operator, Class<?> expression) {}
-    private static final Map<PrefixUnaryOperation, Class<?>> VALID_PREFIX_UNARY_OPERATIONS = Map.ofEntries(
-        Map.entry(new PrefixUnaryOperation("-", Long.class), Long.class),
-        Map.entry(new PrefixUnaryOperation("not", Boolean.class), Boolean.class)
+    public static enum Type {
+        INTEGER, BOOLEAN, 
+    }
+
+    private static final record PrefixUnaryOperation(String operator, Type type) {}
+    private static final Map<PrefixUnaryOperation, Type> VALID_PREFIX_UNARY_OPERATIONS = Map.ofEntries(
+        Map.entry(new PrefixUnaryOperation("-", Type.INTEGER), Type.INTEGER),
+        Map.entry(new PrefixUnaryOperation("not", Type.BOOLEAN), Type.BOOLEAN)
     );
 
-    private static final record BinaryOperation(String operator, Class<?> left, Class<?> right) {}
+    private static final record BinaryOperation(String operator, Type left, Type right) {}
     
-    private static final Map<BinaryOperation, Class<?>> VALID_BINARY_OPERATIONS = Map.ofEntries(
-        Map.entry(new BinaryOperation("+", Long.class, Long.class), Long.class),
-        Map.entry(new BinaryOperation("-", Long.class, Long.class), Long.class),
-        Map.entry(new BinaryOperation("/", Long.class, Long.class), Long.class),
-        Map.entry(new BinaryOperation("*", Long.class, Long.class), Long.class),
-        Map.entry(new BinaryOperation("%", Long.class, Long.class), Long.class),
-        Map.entry(new BinaryOperation("^", Long.class, Long.class), Long.class),
-        Map.entry(new BinaryOperation(">>", Long.class, Long.class), Long.class),
-        Map.entry(new BinaryOperation("<<", Long.class, Long.class), Long.class),
-        Map.entry(new BinaryOperation("|", Long.class, Long.class), Long.class),
-        Map.entry(new BinaryOperation("&", Long.class, Long.class), Long.class),
-        Map.entry(new BinaryOperation("and", Boolean.class, Boolean.class), Boolean.class),
-        Map.entry(new BinaryOperation("or", Boolean.class, Boolean.class), Boolean.class),
-        Map.entry(new BinaryOperation("==", Boolean.class, Boolean.class), Boolean.class),
-        Map.entry(new BinaryOperation("==", Long.class, Long.class), Boolean.class),
-        Map.entry(new BinaryOperation("!=", Boolean.class, Boolean.class), Boolean.class),
-        Map.entry(new BinaryOperation("!=", Long.class, Long.class), Boolean.class),
-        Map.entry(new BinaryOperation(">=", Long.class, Long.class), Boolean.class),
-        Map.entry(new BinaryOperation(">", Long.class, Long.class), Boolean.class),
-        Map.entry(new BinaryOperation("<=", Long.class, Long.class), Boolean.class),
-        Map.entry(new BinaryOperation("<", Long.class, Long.class), Boolean.class)
+    private static final Map<BinaryOperation, Type> VALID_BINARY_OPERATIONS = Map.ofEntries(
+        Map.entry(new BinaryOperation("+", Type.INTEGER, Type.INTEGER), Type.INTEGER),
+        Map.entry(new BinaryOperation("-", Type.INTEGER, Type.INTEGER), Type.INTEGER),
+        Map.entry(new BinaryOperation("/", Type.INTEGER, Type.INTEGER), Type.INTEGER),
+        Map.entry(new BinaryOperation("*", Type.INTEGER, Type.INTEGER), Type.INTEGER),
+        Map.entry(new BinaryOperation("%", Type.INTEGER, Type.INTEGER), Type.INTEGER),
+        Map.entry(new BinaryOperation("^", Type.INTEGER, Type.INTEGER), Type.INTEGER),
+        Map.entry(new BinaryOperation(">>", Type.INTEGER, Type.INTEGER), Type.INTEGER),
+        Map.entry(new BinaryOperation("<<", Type.INTEGER, Type.INTEGER), Type.INTEGER),
+        Map.entry(new BinaryOperation("|", Type.INTEGER, Type.INTEGER), Type.INTEGER),
+        Map.entry(new BinaryOperation("&", Type.INTEGER, Type.INTEGER), Type.INTEGER),
+        Map.entry(new BinaryOperation("and", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN),
+        Map.entry(new BinaryOperation("or", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN),
+        Map.entry(new BinaryOperation("==", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN),
+        Map.entry(new BinaryOperation("==", Type.INTEGER, Type.INTEGER), Type.BOOLEAN),
+        Map.entry(new BinaryOperation("!=", Type.BOOLEAN, Type.BOOLEAN), Type.BOOLEAN),
+        Map.entry(new BinaryOperation("!=", Type.INTEGER, Type.INTEGER), Type.BOOLEAN),
+        Map.entry(new BinaryOperation(">=", Type.INTEGER, Type.INTEGER), Type.BOOLEAN),
+        Map.entry(new BinaryOperation(">", Type.INTEGER, Type.INTEGER), Type.BOOLEAN),
+        Map.entry(new BinaryOperation("<=", Type.INTEGER, Type.INTEGER), Type.BOOLEAN),
+        Map.entry(new BinaryOperation("<", Type.INTEGER, Type.INTEGER), Type.BOOLEAN)
     );
 
-    private Map<String, Class<?>> variables = new HashMap<>();
+    private Map<String, Type> variables = new HashMap<>();
 
     @Override
-    public Class<?> visitProg(ProgContext ctx) {
+    public Type visitProg(ProgContext ctx) {
         return ctx.blockExpression().accept(this);
     }
 
     @Override
-    public Class<?> visitBlockExpression(BlockExpressionContext ctx) {
-        Class<?> last = null;
+    public Type visitBlockExpression(BlockExpressionContext ctx) {
+        Type last = null;
         for (var expression : ctx.expression()) {
             last = expression.accept(this);
         }
         return last;
     }
 
-    private Class<?> error_binaryOperatorNotApplicable(BinaryOperation operation) {
+    private Type error_binaryOperatorNotApplicable(BinaryOperation operation) {
         throw new RuntimeException("Operator '" + operation.operator + "' is not applicable to types: " + operation.left + " and " + operation.right);
     }
 
-    private Class<?> error_prefixUnaryOperatorNotApplicable(PrefixUnaryOperation operation) {
-        throw new RuntimeException("Prefix unary operator '" + operation.operator + "' is not applicable to type: " + operation.expression);
+    private Type error_prefixUnaryOperatorNotApplicable(PrefixUnaryOperation operation) {
+        throw new RuntimeException("Prefix unary operator '" + operation.operator + "' is not applicable to type: " + operation.type);
     }
 
     @Override
-    public Class<?> visitPrefixUnaryExpression(PrefixUnaryExpressionContext ctx) {
+    public Type visitPrefixUnaryExpression(PrefixUnaryExpressionContext ctx) {
         PrefixUnaryOperation operation = new PrefixUnaryOperation(ctx.op.getText(), ctx.expression().accept(this));
 
         if (VALID_PREFIX_UNARY_OPERATIONS.containsKey(operation)) {
@@ -89,8 +92,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<Class<?>> {
     }
 
     @Override
-    public Class<?> visitBinaryExpression(BinaryExpressionContext ctx) {
-        logger.debug("Type Checker | Binary Expression | {} {} {}", ctx.left.getText(), ctx.op.getText(), ctx.right.getText());
+    public Type visitBinaryExpression(BinaryExpressionContext ctx) {
         BinaryOperation operation = new BinaryOperation(ctx.op.getText(), ctx.left.accept(this), ctx.right.accept(this));
 
         if (VALID_BINARY_OPERATIONS.containsKey(operation)) {
@@ -101,22 +103,22 @@ public class TypeCheckVisitor extends TygerBaseVisitor<Class<?>> {
     }
 
     @Override
-    public Class<?> visitGroupedExpression(GroupedExpressionContext ctx) {
+    public Type visitGroupedExpression(GroupedExpressionContext ctx) {
         return ctx.expression().accept(this);
     }
 
     @Override
-    public Class<?> visitLiteralExpression(LiteralExpressionContext ctx) {
+    public Type visitLiteralExpression(LiteralExpressionContext ctx) {
         if (ctx.INTEGER_LITERAL() != null) {
-            return Long.class;
+            return Type.INTEGER;
         } else if (ctx.BOOLEAN_LITERAL() != null) {
-            return Boolean.class;
+            return Type.BOOLEAN;
         }
         throw new RuntimeException("Could not detect type of token: " + ctx.getText());
     }
 
     @Override
-    public Class<?> visitIdentifierExpression(IdentifierExpressionContext ctx) {
+    public Type visitIdentifierExpression(IdentifierExpressionContext ctx) {
         String variableName = ctx.identifier().getText();
         if (variables.containsKey(variableName)) {
             return variables.get(variableName);
@@ -126,37 +128,31 @@ public class TypeCheckVisitor extends TygerBaseVisitor<Class<?>> {
     }
 
     @Override
-    public Class<?> visitAssignmentExpression(AssignmentExpressionContext ctx) {
-        logger.debug("Type Checker | Assignment Expression | {} {} {}", ctx.identifier().getText(), ctx.expression().getText());
-
+    public Type visitAssignmentExpression(AssignmentExpressionContext ctx) {
         String variableName = ctx.identifier().getText();
-        Class<?> type = ctx.expression().accept(this);
+        if (!variables.containsKey(variableName)) {
+            compiler_error("Cannot assign to undeclared variable '%s'", variableName);    
+        }
 
-        if (variables.containsKey(variableName)) {
-            Class<?> previousType = variables.get(variableName);
-            if (type.equals(previousType)) {
-                return type;
-            } else {
-                throw new RuntimeException(String.format(
-                    "Cannot assign value of type %s to variable '%s' of type %s",
-                    type, variableName, previousType
-                ));
-            }
-        } else {
-            variables.put(variableName, type);
+        Type previousType = variables.get(variableName);
+        Type type = ctx.expression().accept(this);
+
+        if (type.equals(previousType)) {
             return type;
+        } else {
+            return compiler_error("Cannot assign value of type %s to variable '%s' of type %s", type, variableName, previousType);
         }
     }
 
     @Override
-    public Class<?> visitIfExpression(IfExpressionContext ctx) {
-        Class<?> conditionType = ctx.condition.accept(this);
-        if (!conditionType.equals(Boolean.class)) {
+    public Type visitIfExpression(IfExpressionContext ctx) {
+        Type conditionType = ctx.condition.accept(this);
+        if (!conditionType.equals(Type.BOOLEAN)) {
             throw new RuntimeException("Condition of if expression must be a boolean. Got: " + conditionType);
         }
 
-        Class<?> blockType = ctx.block.accept(this);
-        Class<?> elseType = ctx.elseif != null
+        Type blockType = ctx.block.accept(this);
+        Type elseType = ctx.elseif != null
             ? ctx.elseif.accept(this)
             : ctx.elseBlock.accept(this);
 
@@ -170,4 +166,35 @@ public class TypeCheckVisitor extends TygerBaseVisitor<Class<?>> {
         return blockType;
     }
 
+    private static final Map<String, Type> TYPE_MAP = Map.of(
+        "int", Type.INTEGER,
+        "bool", Type.BOOLEAN
+    );
+
+    @Override
+    public Type visitVariableDeclarationExpression(VariableDeclarationExpressionContext ctx) {
+        String variableName = ctx.identifier().getText();
+        if (variables.containsKey(variableName)) {
+            compiler_error("Variable '%s' has already been declared.", variableName);
+        }
+
+        String declaredTypeStr = ctx.typeIdentifier().getText();
+        if (!TYPE_MAP.containsKey(declaredTypeStr)) {
+            compiler_error("Variable '%s' is being declared with an undefined type: %s", variableName, declaredTypeStr);
+        }
+
+        Type declaredType = TYPE_MAP.get(declaredTypeStr);
+        Type expressionType = ctx.expression().accept(this);
+
+        if (!declaredType.equals(expressionType)) {
+            compiler_error("Cannot assign value of type %s to variable '%s' of type %s.", expressionType, variableName, declaredType);
+        }
+
+        variables.put(variableName, declaredType);
+        return declaredType;
+    }
+
+    private <T> T compiler_error(String format, Object... args) {
+        throw new RuntimeException(String.format(format, args));
+    }
 }

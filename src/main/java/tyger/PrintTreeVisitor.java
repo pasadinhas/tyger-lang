@@ -9,6 +9,7 @@ import tyger.TygerParser.IfExpressionContext;
 import tyger.TygerParser.LiteralExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
 import tyger.TygerParser.ProgContext;
+import tyger.TygerParser.VariableDeclarationExpressionContext;
 
 public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
 
@@ -136,6 +137,17 @@ public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
         write("</Else>");
         outdent();
         write("</If>");
+
+        return builder;
+    }
+
+    @Override
+    public StringBuilder visitVariableDeclarationExpression(VariableDeclarationExpressionContext ctx) {
+        write("<VariableDeclaration label=\"%s\" type=\"%s\">", ctx.identifier().getText(), ctx.typeIdentifier().getText());
+        indent();
+        ctx.expression().accept(this);
+        outdent();
+        write("</VariableDeclaration>");
 
         return builder;
     }

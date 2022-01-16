@@ -22,6 +22,7 @@ expression
    | left=expression op=('==' | '!=' | '<' | '<=' | '>' | '>=') right=expression    # BinaryExpression 
    | left=expression op='and' right=expression                                      # BinaryExpression
    | left=expression op='or' right=expression                                       # BinaryExpression
+   | type=typeIdentifier identifier '=' expression                                  # VariableDeclarationExpression
    | identifier '=' expression                                                      # AssignmentExpression
    | ifExpression                                                                   # IfExpression_ 
    ;
@@ -34,6 +35,11 @@ ifExpression
    ;
 
 identifier : IDENTIFIER;
+
+typeIdentifier 
+    : 'int'
+    | 'bool'
+    ;
 
 literalExpression
    : INTEGER_LITERAL

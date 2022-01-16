@@ -14,6 +14,7 @@ import tyger.TygerParser.IfExpressionContext;
 import tyger.TygerParser.LiteralExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
 import tyger.TygerParser.ProgContext;
+import tyger.TygerParser.VariableDeclarationExpressionContext;
 
 public class InterpreterVisitor extends TygerBaseVisitor<Object> {
 
@@ -105,5 +106,15 @@ public class InterpreterVisitor extends TygerBaseVisitor<Object> {
         } else {
             return ctx.elseif != null ? ctx.elseif.accept(this) : ctx.elseBlock.accept(this);
         }
+    }
+
+    @Override
+    public Object visitVariableDeclarationExpression(VariableDeclarationExpressionContext ctx) {
+        String variableName = ctx.identifier().getText();
+        Object value = ctx.expression().accept(this);
+
+        variables.put(variableName, value);
+        
+        return value;
     }
 }
