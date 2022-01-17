@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -e
+
+COMPILER=$(find target -name 'tyger-lang-*-jar-with-dependencies.jar' -maxdepth 1)
+
+[ -z "$COMPILER" ] && echo "Could not find the compiler. Did you ./build.sh ?" && exit 1
+
+java --enable-preview -jar $COMPILER $@

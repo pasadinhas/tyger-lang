@@ -168,12 +168,6 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
     @Override
     public Type visitBinaryExpression(BinaryExpressionContext ctx) {
-        logger.debug(
-            "Binary Expression: {} | Start: {line: {}, col: {}} | End: {line: {}, col: {}}",
-            ctx.getText(), 
-            ctx.start.getLine(), ctx.start.getCharPositionInLine(),
-            ctx.stop.getLine(), ctx.stop.getCharPositionInLine()
-        );
         BinaryOperation operation = new BinaryOperation(ctx.op.getText(), ctx.left.accept(this), ctx.right.accept(this));
 
         if (VALID_BINARY_OPERATIONS.containsKey(operation)) {
