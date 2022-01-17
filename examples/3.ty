@@ -3,7 +3,11 @@ func int main() {
     int b = 10 + if a > 4 {2} else {3}
     
     int? age = None
-    age = 25 + (2 + true)
+    age = while age < 
+    
+    100 {
+        age++
+    }
     
     int factOf = 6
     int result = 1

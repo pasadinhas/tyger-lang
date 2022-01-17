@@ -22,6 +22,9 @@ import tyger.TygerParser.WhileExpressionContext;
 
 public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
+    private static final String COLOR_BRIGHT_RED = "\u001b[31;1m";
+    private static final String COLOR_RESET = "\u001b[0m";
+
     private static final int COMPILER_ERROR_LINES_AROUND = 5;
     private static final String COMPILER_ERROR_LINE_PROMPT = "> ";
 
@@ -272,38 +275,58 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     }
 
     private <T> T compiler_error(ParserRuleContext ctx, String format, Object... args) {
-        int lineNumber = ctx.start.getLine();
-        String[] sourceCodeLines = source.split("\n");
-        String sourceCodeLine = sourceCodeLines[lineNumber - 1];
+        int errorStartLine = ctx.start.getLine();
+        int errorStartLineStartChar = ctx.start.getCharPositionInLine();
+        int errorStopLine = ctx.stop.getLine();
+        int errorStopLineStopChar = ctx.stop.getCharPositionInLine() + ctx.stop.getText().length();
         
-        int startCharPosition = ctx.start.getCharPositionInLine();
-        int endCharPosition = ctx.stop.getLine() == lineNumber
-            ? Math.min(ctx.stop.getCharPositionInLine() + ctx.stop.getText().length(), sourceCodeLine.length())
-            : sourceCodeLine.length();
+        String[] sourceCodeLines = source.split("\n");
 
+        int outputStartLine = Math.max(1, errorStartLine - COMPILER_ERROR_LINES_AROUND);
+        int outputStopLine = Math.min(sourceCodeLines.length, errorStopLine + COMPILER_ERROR_LINES_AROUND);
+        
         StringBuilder errorMessage = new StringBuilder("\n\n")
+                .append(COLOR_BRIGHT_RED)
                 .append("Compiler error [")
-                .append(lineNumber)
-                .append(",")
-                .append(startCharPosition)
+                .append(errorStartLine)
+                .append(":")
+                .append(errorStartLineStartChar)
+                .append("-")
+                .append(errorStopLine)
+                .append(":")
+                .append(errorStopLineStopChar)
                 .append("]: ")
+                .append(COLOR_RESET)
                 .append(String.format(format, args))
                 .append("\n\n");
 
-        int startLine = Math.max(1, lineNumber - COMPILER_ERROR_LINES_AROUND);
-        int endLine = Math.min(sourceCodeLines.length, lineNumber + COMPILER_ERROR_LINES_AROUND);
 
-        for (int line = startLine; line <= endLine; line++) {
+
+        for (int lineNumber = outputStartLine; lineNumber <= outputStopLine; lineNumber++) {
+            String line = sourceCodeLines[lineNumber - 1];
             errorMessage.append(COMPILER_ERROR_LINE_PROMPT);
-            errorMessage.append(sourceCodeLines[line - 1]).append('\n');
-            if (line == lineNumber) {
-                for (int i = 0; i < COMPILER_ERROR_LINE_PROMPT.length(); i++) {
-                    errorMessage.append(' ');
+
+            if (lineNumber >= errorStartLine && lineNumber <= errorStopLine) {
+                if (lineNumber > errorStartLine && lineNumber <= errorStopLine) {
+                    errorMessage.append(COLOR_BRIGHT_RED);
                 }
-                for (int i = 0; i < endCharPosition; i++) {
-                    errorMessage.append(i < startCharPosition ? ' ' : '^');
+                
+                for (int charIndex = 0; charIndex < line.length(); charIndex++) {
+                    if (lineNumber == errorStartLine && charIndex == errorStartLineStartChar) {
+                        errorMessage.append(COLOR_BRIGHT_RED);
+                    }
+
+                    errorMessage.append(line.charAt(charIndex));
+
+                    if (lineNumber == errorStopLine && charIndex == errorStopLineStopChar - 1) {
+                        // Reset color
+                        errorMessage.append(COLOR_RESET);
+                    } 
                 }
+                errorMessage.append(COLOR_RESET);
                 errorMessage.append('\n');
+            } else {
+                errorMessage.append(line).append('\n');
             }
         }
 
