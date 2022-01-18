@@ -23,7 +23,7 @@ public class Interpreter {
             return;
         }
 
-        if (!Set.of("run", "xml", "type-check").contains(args[0])) {
+        if (!Set.of("run", "tree", "type-check").contains(args[0])) {
             logger.error("Invalid <action>: {}", args[0]);
             usage();
             return;
@@ -51,23 +51,39 @@ public class Interpreter {
 
             switch (action) {
                 case "run":
-                    prog.accept(new TypeCheckVisitor(source));
+                    prog.accept(new TypeCheckVisitor(filepath, source));
                     final Object result = prog.accept(new InterpreterVisitor());
                     logger.info("Output:\n{}", result);
                     break;
-                case "xml":
+                case "tree":
                     final StringBuilder xml = prog.accept(new PrintTreeVisitor());
                     logger.info("\n{}", xml.toString());
                     break;
                 case "type-check":
-                    TypeCheckVisitor.Type type = prog.accept(new TypeCheckVisitor(source));
+                    TypeCheckVisitor.Type type = prog.accept(new TypeCheckVisitor(filepath, source));
                     logger.info("Type: {}", type);
                     break;
                 default:
                     throw new RuntimeException("Compiler action is not implemented: " + action);
             }
         } catch (final Exception e) {
-            logger.error("Compilation unsuccessful: {}", e.getMessage());
+            StackTraceElement[] stackTrace = e.getStackTrace();
+            StringBuilder at = new StringBuilder();
+            for (int i = 0; i < stackTrace.length; i++) {
+                if (stackTrace[i].getClassName().startsWith("tyger")) {
+                    at.append("\n\tat ")
+                        .append(stackTrace[i].getClassName())
+                        .append('.')
+                        .append(stackTrace[i].getMethodName())
+                        .append('(')
+                        .append(stackTrace[i].getFileName())
+                        .append(':')
+                        .append(stackTrace[i].getLineNumber())
+                        .append(')');
+                    break;
+                }
+            }
+            logger.error("Compilation unsuccessful: {}: {}{}", e.getClass().getName(), e.getMessage(), at);
         }
     }
 
@@ -77,7 +93,7 @@ public class Interpreter {
         logger.info("");
         logger.info("    actions:");
         logger.info("         run         compiles, type-checks and interprets the source file");
-        logger.info("         xml         prints an XML representation of the AST");
+        logger.info("         tree        prints a tree representation of the AST");
         logger.info("         type-check  type-checks the source file and outputs the return type");
         logger.info("");
         logger.info("    file : the source code file");

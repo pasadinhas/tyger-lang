@@ -1,0 +1,12 @@
+func int main() {
+    int factorial = 10;
+    int result = 1;
+    
+    while factorial > 0; {
+        if result > 720 {
+            break result
+        } else {
+            result = result * factorial--
+        }
+    }
+}

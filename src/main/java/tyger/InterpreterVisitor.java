@@ -9,6 +9,7 @@ import java.util.function.BiFunction;
 import tyger.TygerParser.AssignmentExpressionContext;
 import tyger.TygerParser.BinaryExpressionContext;
 import tyger.TygerParser.BlockExpressionContext;
+import tyger.TygerParser.BreakExpressionContext;
 import tyger.TygerParser.GroupedExpressionContext;
 import tyger.TygerParser.IdentifierExpressionContext;
 import tyger.TygerParser.IfExpressionContext;
@@ -20,6 +21,14 @@ import tyger.TygerParser.VariableDeclarationExpressionContext;
 import tyger.TygerParser.WhileExpressionContext;
 
 public class InterpreterVisitor extends TygerBaseVisitor<Object> {
+
+    private class LoopBreakException extends RuntimeException {
+        Object value;
+
+        protected LoopBreakException(Object value) {
+            this.value = value;
+        }
+    }
 
     private static class None {
         @Override
@@ -76,7 +85,7 @@ public class InterpreterVisitor extends TygerBaseVisitor<Object> {
         if (expressionValue.equals(NoneLiteral)) {
             return expressionValue;
         } 
-        
+
         return switch (ctx.op.getText()) {
             case "++", "--" -> {
                 Long value = (Long) expressionValue;
@@ -180,9 +189,18 @@ public class InterpreterVisitor extends TygerBaseVisitor<Object> {
     @Override
     public Object visitWhileExpression(WhileExpressionContext ctx) {
         Object result = NoneLiteral;
-        while ((Boolean) ctx.condition.accept(this)) {
-            result = ctx.blockExpression().accept(this);
+        try {
+            while ((Boolean) ctx.condition.accept(this)) {
+                result = ctx.blockExpression().accept(this);
+            }
+            return result;
+        } catch (LoopBreakException e) {
+            return e.value;
         }
-        return result;
+    }
+
+    @Override
+    public Object visitBreakExpression(BreakExpressionContext ctx) {
+        throw new LoopBreakException(ctx.expression() == null ? NoneLiteral : ctx.expression().accept(this));
     }
 }

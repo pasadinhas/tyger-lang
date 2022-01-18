@@ -3,6 +3,7 @@ package tyger;
 import tyger.TygerParser.AssignmentExpressionContext;
 import tyger.TygerParser.BinaryExpressionContext;
 import tyger.TygerParser.BlockExpressionContext;
+import tyger.TygerParser.BreakExpressionContext;
 import tyger.TygerParser.GroupedExpressionContext;
 import tyger.TygerParser.IdentifierExpressionContext;
 import tyger.TygerParser.IfExpressionContext;
@@ -177,6 +178,22 @@ public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
             ctx.blockExpression().accept(this);
         outdent();
         write("</While>");
+        return builder;
+    }
+
+    @Override
+    public StringBuilder visitBreakExpression(BreakExpressionContext ctx) {
+        if (ctx.expression() == null) {
+            write("</Break>");
+            return builder;
+        }
+
+        write("<Break>");
+        indent();
+        ctx.expression().accept(this);
+        outdent();
+        write("</Break>");
+
         return builder;
     }
 }

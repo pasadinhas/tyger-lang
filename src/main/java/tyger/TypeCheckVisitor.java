@@ -2,6 +2,7 @@ package tyger;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Stack;
 
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.slf4j.Logger;
@@ -10,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import tyger.TygerParser.AssignmentExpressionContext;
 import tyger.TygerParser.BinaryExpressionContext;
 import tyger.TygerParser.BlockExpressionContext;
+import tyger.TygerParser.BreakExpressionContext;
 import tyger.TygerParser.GroupedExpressionContext;
 import tyger.TygerParser.IdentifierExpressionContext;
 import tyger.TygerParser.IfExpressionContext;
@@ -25,10 +27,14 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     private static final String COLOR_BRIGHT_RED = "\u001b[31;1m";
     private static final String COLOR_RESET = "\u001b[0m";
 
-    private static final int COMPILER_ERROR_LINES_AROUND = 5;
-    private static final String COMPILER_ERROR_LINE_PROMPT = "> ";
+    private static final int COMPILER_ERROR_LINES_AROUND = 7;
 
     private static final Logger logger = LoggerFactory.getLogger(TypeCheckVisitor.class);
+    
+    /**
+     * Stack of last seen loops. Used to know to which loop a break expression belongs.
+     */
+    private final Stack<WhileExpressionContext> loopStack = new Stack<>();
 
     public static enum Type {
         INTEGER, 
@@ -127,10 +133,12 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         VALID_BINARY_OPERATIONS.putAll(optionalBinaryOperations);
     }
 
+    private String filename;
     private String source;
     private Map<String, Type> variables = new HashMap<>();
 
-    public TypeCheckVisitor(String source) {
+    public TypeCheckVisitor(String filename, String source) {
+        this.filename = filename;
         this.source = source;
     }
 
@@ -285,16 +293,14 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         int outputStartLine = Math.max(1, errorStartLine - COMPILER_ERROR_LINES_AROUND);
         int outputStopLine = Math.min(sourceCodeLines.length, errorStopLine + COMPILER_ERROR_LINES_AROUND);
         
-        StringBuilder errorMessage = new StringBuilder("\n\n")
+        int lineNumberDigits = outputStopLine / 10;
+
+        StringBuilder errorMessage = new StringBuilder("\n")
                 .append(COLOR_BRIGHT_RED)
                 .append("Compiler error [")
+                .append(filename)
+                .append(":")
                 .append(errorStartLine)
-                .append(":")
-                .append(errorStartLineStartChar)
-                .append("-")
-                .append(errorStopLine)
-                .append(":")
-                .append(errorStopLineStopChar)
                 .append("]: ")
                 .append(COLOR_RESET)
                 .append(String.format(format, args))
@@ -303,14 +309,21 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
 
         for (int lineNumber = outputStartLine; lineNumber <= outputStopLine; lineNumber++) {
+            int lineNumberWhitespacePadding = lineNumberDigits - lineNumber / 10;
+            for (int i = 0; i < lineNumberWhitespacePadding; i++) {
+                errorMessage.append(' ');
+            }
+
+            errorMessage.append(lineNumber)
+                .append(": ");
+
             String line = sourceCodeLines[lineNumber - 1];
-            errorMessage.append(COMPILER_ERROR_LINE_PROMPT);
 
             if (lineNumber >= errorStartLine && lineNumber <= errorStopLine) {
                 if (lineNumber > errorStartLine && lineNumber <= errorStopLine) {
                     errorMessage.append(COLOR_BRIGHT_RED);
                 }
-                
+
                 for (int charIndex = 0; charIndex < line.length(); charIndex++) {
                     if (lineNumber == errorStartLine && charIndex == errorStartLineStartChar) {
                         errorMessage.append(COLOR_BRIGHT_RED);
@@ -336,12 +349,27 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     }
 
     public Type visitWhileExpression(WhileExpressionContext ctx) {
+        loopStack.push(ctx);
+        
         Type conditionType = ctx.condition.accept(this);
+
         if (!conditionType.equals(Type.BOOLEAN)) {
             compiler_error(ctx.condition, "Condition of while expression must be a boolean. Got: %s", conditionType);
         }
 
-        return ctx.blockExpression().accept(this).toOptional(); // while loop can return optionally if the condition never triggers.
+        // while loop can return optionally if the condition never triggers.
+        Type result = ctx.blockExpression().accept(this).toOptional(); 
+        
+        loopStack.pop();
+
+        return result;
     };
 
+    public Type visitBreakExpression(BreakExpressionContext ctx) {
+        if (loopStack.isEmpty()) {
+            return compiler_error(ctx, "Break expression must occur inside a loop.");
+        }
+
+        return ctx.expression() == null ? Type.OPTIONAL_ANY : ctx.expression().accept(this);
+    };
 }

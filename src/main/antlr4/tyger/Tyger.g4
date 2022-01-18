@@ -11,8 +11,10 @@ expression
    : literalExpression                                                              # LiteralExpression_
    | identifier                                                                     # IdentifierExpression
    | 'while' condition=expression blockExpression                                   # WhileExpression
+   | 'break' expression?                                                            # BreakExpression
    | blockExpression                                                                # GroupedExpression 
    | '(' expression ')'                                                             # GroupedExpression 
+   | expression ';'                                                                 # GroupedExpression
    | expression op=('--' | '++')                                                    # PostfixUnaryExpression
    | op=('-' | 'not' | '--' | '++') expression                                      # PrefixUnaryExpression
    | left=expression op=('*' | '/' | '%') right=expression                          # BinaryExpression 
