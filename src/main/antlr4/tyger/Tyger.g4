@@ -9,6 +9,7 @@ blockExpression
 
 expression
    : literalExpression                                                              # LiteralExpression_
+   | 'print' '(' expression ')'                                                     # PrintExpression // Temporary
    | identifier                                                                     # IdentifierExpression
    | 'while' condition=expression blockExpression                                   # WhileExpression
    | 'break' expression?                                                            # BreakExpression

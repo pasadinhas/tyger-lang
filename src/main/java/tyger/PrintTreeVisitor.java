@@ -10,6 +10,7 @@ import tyger.TygerParser.IfExpressionContext;
 import tyger.TygerParser.LiteralExpressionContext;
 import tyger.TygerParser.PostfixUnaryExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
+import tyger.TygerParser.PrintExpressionContext;
 import tyger.TygerParser.ProgContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
 import tyger.TygerParser.WhileExpressionContext;
@@ -193,6 +194,17 @@ public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
         ctx.expression().accept(this);
         outdent();
         write("</Break>");
+
+        return builder;
+    }
+
+    @Override
+    public StringBuilder visitPrintExpression(PrintExpressionContext ctx) {
+        write("<Print>");
+        indent();
+        ctx.expression().accept(this);
+        outdent();
+        write("</Print>");
 
         return builder;
     }

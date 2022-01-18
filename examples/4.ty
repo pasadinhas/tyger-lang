@@ -1,12 +1,18 @@
 func int main() {
     int factorial = 10;
     int result = 1;
-    
+    int? hack = 42;
+
     while factorial > 0; {
         if result > 720 {
-            break result
-        } else {
-            result = result * factorial--
-        }
+            int i = 0
+            while i < 10 {
+                print(result + ++i)
+                if i >= 3 {
+                    break i
+                } else {i}
+            }
+        } else {hack}
+        result = result * factorial--
     }
 }

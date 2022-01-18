@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import tyger.TygerParser.AssignmentExpressionContext;
 import tyger.TygerParser.BinaryExpressionContext;
 import tyger.TygerParser.BlockExpressionContext;
@@ -16,11 +19,14 @@ import tyger.TygerParser.IfExpressionContext;
 import tyger.TygerParser.LiteralExpressionContext;
 import tyger.TygerParser.PostfixUnaryExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
+import tyger.TygerParser.PrintExpressionContext;
 import tyger.TygerParser.ProgContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
 import tyger.TygerParser.WhileExpressionContext;
 
 public class InterpreterVisitor extends TygerBaseVisitor<Object> {
+
+    Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private class LoopBreakException extends RuntimeException {
         Object value;
@@ -202,5 +208,12 @@ public class InterpreterVisitor extends TygerBaseVisitor<Object> {
     @Override
     public Object visitBreakExpression(BreakExpressionContext ctx) {
         throw new LoopBreakException(ctx.expression() == null ? NoneLiteral : ctx.expression().accept(this));
+    }
+
+    @Override
+    public Object visitPrintExpression(PrintExpressionContext ctx) {
+        Object result = ctx.expression().accept(this);
+        logger.info("{}", result);
+        return result;
     }
 }

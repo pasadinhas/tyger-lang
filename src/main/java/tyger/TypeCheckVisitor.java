@@ -18,6 +18,7 @@ import tyger.TygerParser.IfExpressionContext;
 import tyger.TygerParser.LiteralExpressionContext;
 import tyger.TygerParser.PostfixUnaryExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
+import tyger.TygerParser.PrintExpressionContext;
 import tyger.TygerParser.ProgContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
 import tyger.TygerParser.WhileExpressionContext;
@@ -371,5 +372,9 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         }
 
         return ctx.expression() == null ? Type.OPTIONAL_ANY : ctx.expression().accept(this);
+    };
+
+    public Type visitPrintExpression(PrintExpressionContext ctx) {
+        return ctx.expression().accept(this);
     };
 }
