@@ -1,17 +1,16 @@
 package tyger;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Stack;
+import java.util.*;
 
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import tyger.TygerParser.ArgsListContext;
 import tyger.TygerParser.AssignmentExpressionContext;
 import tyger.TygerParser.BinaryExpressionContext;
 import tyger.TygerParser.BlockExpressionContext;
-import tyger.TygerParser.BreakExpressionContext;
+import tyger.TygerParser.FunctionDeclarationExpressionContext;
 import tyger.TygerParser.GroupedExpressionContext;
 import tyger.TygerParser.IdentifierExpressionContext;
 import tyger.TygerParser.IfExpressionContext;
@@ -25,6 +24,13 @@ import tyger.TygerParser.WhileExpressionContext;
 
 public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
+    private record Function(String name, Type type, Map<String, Type> arguments) {}
+    private record Scope(Map<String, Type> variables, Map<String, Function> functions) {
+        Scope() {
+            this(new HashMap<>(), new HashMap<>());
+        }
+    }
+
     private static final String COLOR_BRIGHT_RED = "\u001b[31;1m";
     private static final String COLOR_RESET = "\u001b[0m";
 
@@ -37,7 +43,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
      */
     private final Stack<WhileExpressionContext> loopStack = new Stack<>();
 
-    public static enum Type {
+    public enum Type {
         INTEGER, 
         OPTIONAL_INTEGER,
         BOOLEAN,
@@ -68,9 +74,38 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         boolean isAssignableFrom(Type other) {
             return this.equals(other) || this.isOptional() && (other.equals(OPTIONAL_ANY) || this.toNonOptional().equals(other));
         }
+
+        boolean isNotAssignableFrom(Type other) {
+            return !isAssignableFrom(other);
+        }
+
+        /**
+         * Returns the lowest common ancestor of both types, i.e. the most specific type that both types could be cast to.
+         *
+         * @return the lowest common ancestor of both types.
+         */
+        Optional<Type> lca(Type other) {
+            if (this.equals(other)) {
+                return Optional.of(this);
+            }
+
+            if (this.toOptional().equals(other) || other.toOptional().equals(this)) {
+                return Optional.of(this.toOptional());
+            }
+
+            if (OPTIONAL_ANY.equals(this)) {
+                return Optional.of(other.toOptional());
+            }
+
+            if (OPTIONAL_ANY.equals(other)) {
+                return Optional.of(this.toOptional());
+            }
+
+            return Optional.empty();
+        }
     }
 
-    private static final record PrefixUnaryOperation(String operator, Type type) {}
+    private record PrefixUnaryOperation(String operator, Type type) {}
     private static final Map<PrefixUnaryOperation, Type> VALID_PREFIX_UNARY_OPERATIONS = Map.ofEntries(
         Map.entry(new PrefixUnaryOperation("-", Type.INTEGER), Type.INTEGER),
         Map.entry(new PrefixUnaryOperation("-", Type.OPTIONAL_INTEGER), Type.OPTIONAL_INTEGER),
@@ -82,7 +117,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         Map.entry(new PrefixUnaryOperation("not", Type.OPTIONAL_BOOLEAN), Type.OPTIONAL_BOOLEAN)
     );
 
-    private static final record PostfixUnaryOperation(String operator, Type type) {}
+    private record PostfixUnaryOperation(String operator, Type type) {}
     private static final Map<PostfixUnaryOperation, Type> VALID_POSTFIX_UNARY_OPERATIONS = Map.ofEntries(
         Map.entry(new PostfixUnaryOperation("--", Type.INTEGER), Type.INTEGER),
         Map.entry(new PostfixUnaryOperation("--", Type.OPTIONAL_INTEGER), Type.OPTIONAL_INTEGER),
@@ -90,7 +125,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         Map.entry(new PostfixUnaryOperation("++", Type.OPTIONAL_INTEGER), Type.OPTIONAL_INTEGER)
     );
 
-    private static final record BinaryOperation(String operator, Type left, Type right) {}
+    private record BinaryOperation(String operator, Type left, Type right) {}
     
     private static final Map<BinaryOperation, Type> VALID_BINARY_OPERATIONS = new HashMap<>();
 
@@ -119,12 +154,10 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
         // Add operations with OPTIONAL types.
         Map<BinaryOperation, Type> optionalBinaryOperations = new HashMap<>();
-        VALID_BINARY_OPERATIONS.entrySet().forEach(entry -> {
-            BinaryOperation operation = entry.getKey();
+        VALID_BINARY_OPERATIONS.forEach((operation, result) -> {
             String op = operation.operator();
             Type left = operation.left();
             Type right = operation.right();
-            Type result = entry.getValue();
 
             optionalBinaryOperations.put(new BinaryOperation(op, left.toOptional(), right), result.toOptional());
             optionalBinaryOperations.put(new BinaryOperation(op, left, right.toOptional()), result.toOptional());
@@ -134,26 +167,146 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         VALID_BINARY_OPERATIONS.putAll(optionalBinaryOperations);
     }
 
-    private String filename;
-    private String source;
-    private Map<String, Type> variables = new HashMap<>();
+    private final String filename;
+    private final String source;
+    private final LinkedList<Scope> scopes = new LinkedList<>();
 
     public TypeCheckVisitor(String filename, String source) {
         this.filename = filename;
         this.source = source;
     }
 
+    private Optional<Type> findVariable(String name) {
+        var iterator = scopes.iterator();
+        while (iterator.hasNext()) {
+            var variables = iterator.next().variables;
+            if (variables.containsKey(name)) {
+                return Optional.of(variables.get(name));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Type> findVariableInCurrentScope(String name) {
+        assert scopes.peek() != null;
+        return Optional.ofNullable(scopes.peek().variables.get(name));
+    }
+
+    private void setVariable(String name, Type value) {
+        var iterator = scopes.iterator();
+        while (iterator.hasNext()) {
+            var variables = iterator.next().variables;
+            if (variables.containsKey(name)) {
+                variables.put(name, value);
+                return;
+            }
+        }
+
+        assert scopes.peek() != null;
+        scopes.peek().variables.put(name, value);
+    }
+
+    private void setVariableInCurrentScope(String name, Type value) {
+        assert scopes.peek() != null;
+        scopes.peek().variables.put(name, value);
+    }
+
+    private Optional<Function> findFunction(String name) {
+        var iterator = scopes.iterator();
+        while (iterator.hasNext()) {
+            var functions = iterator.next().functions;
+            if (functions.containsKey(name)) {
+                return Optional.of(functions.get(name));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private void setFunction(String name, Type type, Map<String, Type> arguments) {
+        assert scopes.peek() != null;
+        scopes.peek().functions.put(name, new Function(name, type, arguments));
+    }
+
+    private void scope_push() {
+        this.scopes.push(new Scope());
+    }
+    private void scope_pop() {
+        this.scopes.pop();
+    }
+
     @Override
     public Type visitProg(ProgContext ctx) {
-        return ctx.blockExpression().accept(this);
+        scope_push();
+
+        ctx.functionDeclarationExpression().forEach(function -> {
+            String functionName = function.identifier().getText();
+            
+            if (findFunction(functionName).isPresent()) {
+                compiler_error(function.identifier(), "Function with name %s had already been defined.", functionName);
+            }
+
+            setFunction(functionName, function.typeIdentifier().accept(this), functionArguments(function.argsList()));
+        });
+
+        ctx.functionDeclarationExpression().forEach(function -> function.accept(this));
+
+        var mainFunction = findFunction("main");
+        if (mainFunction.isEmpty()) {
+            return compiler_error(ctx, "No function main detected.");
+        }
+
+        scope_pop();
+        return mainFunction.get().type;
+    }
+
+    private Map<String, Type> functionArguments(ArgsListContext ctx) {
+        Map<String, Type> arguments = new HashMap<>();
+
+        for (var argsList = ctx; argsList != null; argsList = argsList.argsList()) {
+            arguments.put(
+                    argsList.identifier().getText(),
+                    argsList.typeIdentifier().accept(this)
+            );
+        }
+
+        return arguments;
+    }
+
+    public Type visitFunctionDeclarationExpression(FunctionDeclarationExpressionContext ctx) {
+        Type declaredType = ctx.typeIdentifier().accept(this);
+        
+        scope_push();
+        functionArguments(ctx.argsList()).forEach(this::setVariable);
+        
+        Type bodyReturnType = ctx.blockExpression().accept(this);
+        
+        scope_pop();
+
+        if (declaredType.isNotAssignableFrom(bodyReturnType)) {
+            compiler_error(ctx, "Expected function to return %s but it returns %s instead.", declaredType, bodyReturnType);
+        }
+
+        return declaredType;
+    }
+
+    public Type visitTypeIdentifier(tyger.TygerParser.TypeIdentifierContext ctx) {
+        String typeName = ctx.getText();
+
+        if (!TYPE_MAP.containsKey(typeName)) {
+            compiler_error(ctx, "Unknown type: %s", typeName);
+        }
+
+        return TYPE_MAP.get(typeName);
     }
 
     @Override
     public Type visitBlockExpression(BlockExpressionContext ctx) {
+        scope_push();
         Type last = null;
         for (var expression : ctx.expression()) {
             last = expression.accept(this);
         }
+        scope_pop();
         return last;
     }
 
@@ -176,7 +329,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         }
         
         return VALID_POSTFIX_UNARY_OPERATIONS.get(operation);
-    };
+    }
 
     @Override
     public Type visitBinaryExpression(BinaryExpressionContext ctx) {
@@ -210,8 +363,9 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     @Override
     public Type visitIdentifierExpression(IdentifierExpressionContext ctx) {
         String variableName = ctx.identifier().getText();
-        if (variables.containsKey(variableName)) {
-            return variables.get(variableName);
+        var variable = findVariable(variableName);
+        if (variable.isPresent()) {
+            return variable.get();
         }
 
         return compiler_error(ctx, "Undefined variable: %s", variableName);
@@ -220,14 +374,15 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     @Override
     public Type visitAssignmentExpression(AssignmentExpressionContext ctx) {
         String variableName = ctx.identifier().getText();
-        if (!variables.containsKey(variableName)) {
+        var variable = findVariable(variableName);
+        if (variable.isEmpty()) {
             compiler_error(ctx, "Cannot assign to undeclared variable '%s'", variableName);    
         }
 
-        Type declaredType = variables.get(variableName);
+        Type declaredType = variable.get();
         Type assignedType = ctx.expression().accept(this);
 
-        if (!declaredType.isAssignableFrom(assignedType)) {
+        if (declaredType.isNotAssignableFrom(assignedType)) {
             return compiler_error(ctx, "Cannot assign value of type %s to variable '%s' of type %s", assignedType, variableName, declaredType);
         } 
 
@@ -242,15 +397,17 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         }
 
         Type blockType = ctx.block.accept(this);
-        Type elseType = ctx.elseif != null
-            ? ctx.elseif.accept(this)
-            : ctx.elseBlock.accept(this);
+        Type elseType = ctx.elseBlock != null
+                ? ctx.elseBlock.accept(this)
+                : Type.OPTIONAL_ANY;
 
-        if (!elseType.equals(blockType)) {
-            return compiler_error(ctx, "If expression must return the same type in all branches. Got %s and %s", blockType, elseType);
+        final Optional<Type> optionalExpressionType = blockType.lca(elseType);
+
+        if (optionalExpressionType.isEmpty()) {
+            return compiler_error(ctx, "If expression must return compatible types in both branches. Got %s and %s", blockType, elseType);
         }
 
-        return blockType;
+        return optionalExpressionType.get();
     }
 
     private static final Map<String, Type> TYPE_MAP = Map.of(
@@ -263,7 +420,8 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     @Override
     public Type visitVariableDeclarationExpression(VariableDeclarationExpressionContext ctx) {
         String variableName = ctx.identifier().getText();
-        if (variables.containsKey(variableName)) {
+        var variable = findVariableInCurrentScope(variableName);
+        if (variable.isPresent()) {
             compiler_error(ctx, "Variable '%s' has already been declared.", variableName);
         }
 
@@ -275,11 +433,11 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         Type declaredType = TYPE_MAP.get(declaredTypeStr);
         Type expressionType = ctx.expression().accept(this);
 
-        if (!declaredType.isAssignableFrom(expressionType)) {
+        if (declaredType.isNotAssignableFrom(expressionType)) {
             compiler_error(ctx, "Cannot assign value of type %s to variable '%s' of type %s.", expressionType, variableName, declaredType);
         }
 
-        variables.put(variableName, declaredType);
+        setVariableInCurrentScope(variableName, declaredType);
         return declaredType;
     }
 
@@ -298,7 +456,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
         StringBuilder errorMessage = new StringBuilder("\n")
                 .append(COLOR_BRIGHT_RED)
-                .append("Compiler error [")
+                .append("Compilation error [")
                 .append(filename)
                 .append(":")
                 .append(errorStartLine)
@@ -311,9 +469,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
         for (int lineNumber = outputStartLine; lineNumber <= outputStopLine; lineNumber++) {
             int lineNumberWhitespacePadding = lineNumberDigits - lineNumber / 10;
-            for (int i = 0; i < lineNumberWhitespacePadding; i++) {
-                errorMessage.append(' ');
-            }
+            errorMessage.append(" ".repeat(Math.max(0, lineNumberWhitespacePadding)));
 
             errorMessage.append(lineNumber)
                 .append(": ");
@@ -321,7 +477,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
             String line = sourceCodeLines[lineNumber - 1];
 
             if (lineNumber >= errorStartLine && lineNumber <= errorStopLine) {
-                if (lineNumber > errorStartLine && lineNumber <= errorStopLine) {
+                if (lineNumber > errorStartLine) {
                     errorMessage.append(COLOR_BRIGHT_RED);
                 }
 
@@ -364,17 +520,75 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         loopStack.pop();
 
         return result;
-    };
-
-    public Type visitBreakExpression(BreakExpressionContext ctx) {
-        if (loopStack.isEmpty()) {
-            return compiler_error(ctx, "Break expression must occur inside a loop.");
-        }
-
-        return ctx.expression() == null ? Type.OPTIONAL_ANY : ctx.expression().accept(this);
-    };
+    }
 
     public Type visitPrintExpression(PrintExpressionContext ctx) {
         return ctx.expression().accept(this);
-    };
+    }
+
+
+    private List<Type> expressionListTypes(final TygerParser.ExpressionListContext ctx) {
+        List<Type> expressionsTypes = new ArrayList<>();
+
+        for (var expressionList = ctx; expressionList != null; expressionList = expressionList.expressionList()) {
+            expressionsTypes.add(expressionList.expression().accept(this));
+        }
+
+        return expressionsTypes;
+    }
+
+    @Override
+    public Type visitFunctionCallExpression(final TygerParser.FunctionCallExpressionContext ctx) {
+        final String functionName = ctx.identifier().getText();
+        final Optional<Function> optionalFunction = findFunction(functionName);
+
+        if (optionalFunction.isEmpty()) {
+            compiler_error(ctx, "Unknown function: %s", functionName);
+        }
+
+        Function function = optionalFunction.get();
+
+        final Collection<Type> receivedTypes = expressionListTypes(ctx.expressionList());
+
+        final int receivedArgumentsNumber = receivedTypes.size();
+        final int expectedArgumentsNumber = function.arguments.size();
+        if (receivedArgumentsNumber != expectedArgumentsNumber) {
+            compiler_error(ctx, "Function %s expects %d arguments but got %d", functionName, expectedArgumentsNumber, receivedArgumentsNumber);
+        }
+
+        final var receivedTypesIterator = receivedTypes.iterator();
+        final var expectedTypesIterator = function.arguments.entrySet().iterator();
+
+        for (int i = 0; i < expectedArgumentsNumber; i++) {
+            var receivedType = receivedTypesIterator.next();
+            var expectedType = expectedTypesIterator.next();
+
+            if (expectedType.getValue().isNotAssignableFrom(receivedType)) {
+                compiler_error(
+                        ctx,
+                        "Expected argument %s of function %s (%s argument) to be of type %s but got %s",
+                        expectedType.getKey(),
+                        functionName,
+                        ordinal(i + 1),
+                        expectedType.getValue(),
+                        receivedType
+                );
+            }
+        }
+
+        return function.type;
+    }
+
+    private static String ordinal(int i) {
+        String[] suffixes = new String[] { "th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th" };
+        switch (i % 100) {
+            case 11:
+            case 12:
+            case 13:
+                return i + "th";
+            default:
+                return i + suffixes[i % 10];
+
+        }
+    }
 }

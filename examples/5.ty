@@ -1,0 +1,41 @@
+func int main(int argc) {
+    int a = 5
+    print({
+        int a = true
+        a
+    })
+    a
+}
+
+func int main_two(int argc) {
+    int a = 5
+    {
+        bool a = true
+        print(a)
+        a
+    } and false
+    a
+}
+
+
+
+func int fourTimes(int n) {
+    double(n) + double(n)
+}
+
+func int double(int m) {
+    m + m
+}
+
+func int fib(int n) {
+    print(n)
+    if n <= 0 {
+        0
+    } else {
+        if n == 1 {
+            1
+        } else {
+            fib(n - 1) + fib(n - 2)
+        }
+    }
+}

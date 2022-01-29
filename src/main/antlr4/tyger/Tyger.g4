@@ -1,19 +1,30 @@
 // Define a grammar called Hello
 grammar Tyger;
 
-prog : 'func' 'int' 'main' '(' ')' blockExpression EOF;
+prog : functionDeclarationExpression+ EOF;
 
 blockExpression
     : '{' expression* '}'
     ;
 
+functionDeclarationExpression
+    : 'func' typeIdentifier identifier '(' argsList? ')' blockExpression
+    ;
+
+argsList
+    : typeIdentifier identifier
+    | typeIdentifier identifier ',' argsList
+    ;
+
 expression
    : literalExpression                                                              # LiteralExpression_
    | 'print' '(' expression ')'                                                     # PrintExpression // Temporary
+   | identifier '(' params=expressionList? ')'                                      # FunctionCallExpression
    | identifier                                                                     # IdentifierExpression
    | 'while' condition=expression blockExpression                                   # WhileExpression
-   | 'break' expression?                                                            # BreakExpression
-   | blockExpression                                                                # GroupedExpression 
+// TODO: Add support for breaking out of loops.
+//   | 'break' expression?                                                            # BreakExpression
+   | blockExpression                                                                # BlockExpression_
    | '(' expression ')'                                                             # GroupedExpression 
    | expression ';'                                                                 # GroupedExpression
    | expression op=('--' | '++')                                                    # PostfixUnaryExpression
@@ -32,11 +43,16 @@ expression
    | ifExpression                                                                   # IfExpression_ 
    ;
 
+expressionList
+   : expression
+   | expression ',' expressionList
+   ;
+
 ifExpression
    : 'if' condition=expression block=blockExpression
-   (
-      'else' (elseBlock=blockExpression | elseif=ifExpression)
-   )//? else is currently mandatory, due to lack of optionals. 
+    ('else' elseBlock=blockExpression)?
+ // TODO: Add support for else if
+ // ('else' (elseBlock=blockExpression | elseif=ifExpression))
    ;
 
 identifier : IDENTIFIER;

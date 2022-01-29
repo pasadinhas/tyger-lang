@@ -1,9 +1,10 @@
 package tyger;
 
+import tyger.TygerParser.ArgsListContext;
 import tyger.TygerParser.AssignmentExpressionContext;
 import tyger.TygerParser.BinaryExpressionContext;
 import tyger.TygerParser.BlockExpressionContext;
-import tyger.TygerParser.BreakExpressionContext;
+import tyger.TygerParser.FunctionDeclarationExpressionContext;
 import tyger.TygerParser.GroupedExpressionContext;
 import tyger.TygerParser.IdentifierExpressionContext;
 import tyger.TygerParser.IfExpressionContext;
@@ -38,15 +39,45 @@ public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
         indentation -= STEP;
     }
 
+    private void withIndentation(Runnable runnable) {
+        indent();
+        runnable.run();
+        outdent();
+    }
+
     @Override
     public StringBuilder visitProg(ProgContext ctx) {
         write("<Program>");
-        indent();
-        ctx.blockExpression().accept(this);
-        outdent();
+        withIndentation(() ->
+                ctx.functionDeclarationExpression().forEach(function -> function.accept(this)));
         write("</Program>");
         return builder;
     }    
+
+    @Override
+    public StringBuilder visitFunctionDeclarationExpression(FunctionDeclarationExpressionContext ctx) {
+        write("<Function name=\"%s\" type=\"%s\">", ctx.identifier().getText(), ctx.typeIdentifier().getText());
+        withIndentation(() -> {
+            if (ctx.argsList() != null) {
+                ctx.argsList().accept(this);
+            }
+            ctx.blockExpression().accept(this);
+        });
+        write("</Function>");
+
+        return builder;
+    }
+
+    @Override
+    public StringBuilder visitArgsList(ArgsListContext ctx) {
+        write("<Argument type=\"%s\">%s</Argument>", ctx.typeIdentifier().getText(), ctx.identifier().getText());
+        
+        if (ctx.argsList() != null) {
+            ctx.argsList().accept(this);
+        }
+
+        return builder;
+    }
 
     @Override
     public StringBuilder visitBlockExpression(BlockExpressionContext ctx) {
@@ -130,27 +161,18 @@ public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
     @Override
     public StringBuilder visitIfExpression(IfExpressionContext ctx) {
         write("<If>");
-        indent();
-        write("<Condition>");
-        indent();
-        ctx.expression().accept(this);
-        outdent();
-        write("</Condition>");
-        write("<Block>");
-        indent();
-        ctx.block.accept(this);
-        outdent();
-        write("</Block>");
-        write("<Else>");
-        indent();
-        if (ctx.elseif != null) {
-            ctx.elseif.accept(this);
-        } else {
-            ctx.elseBlock.accept(this);
-        }
-        outdent();
-        write("</Else>");
-        outdent();
+        withIndentation(() -> {
+            write("<Condition>");
+            withIndentation(() -> ctx.expression().accept(this));
+            write("</Condition>");
+            write("<Block>");
+            withIndentation(() -> ctx.block.accept(this));
+            write("</Block>");
+            if (ctx.elseBlock == null) { return; }
+            write("<Else>");
+            withIndentation(() -> ctx.elseBlock.accept(this));
+            write("</Else>");
+        });
         write("</If>");
 
         return builder;
@@ -183,22 +205,6 @@ public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
     }
 
     @Override
-    public StringBuilder visitBreakExpression(BreakExpressionContext ctx) {
-        if (ctx.expression() == null) {
-            write("</Break>");
-            return builder;
-        }
-
-        write("<Break>");
-        indent();
-        ctx.expression().accept(this);
-        outdent();
-        write("</Break>");
-
-        return builder;
-    }
-
-    @Override
     public StringBuilder visitPrintExpression(PrintExpressionContext ctx) {
         write("<Print>");
         indent();
@@ -206,6 +212,27 @@ public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
         outdent();
         write("</Print>");
 
+        return builder;
+    }
+
+    @Override
+    public StringBuilder visitFunctionCallExpression(final TygerParser.FunctionCallExpressionContext ctx) {
+        write("<FunctionCall name=\"%s\">", ctx.identifier().getText());
+        withIndentation(() -> {
+            if (ctx.params != null) {
+                ctx.params.accept(this);
+            }
+        });
+        write("</FunctionCall>");
+        return builder;
+    }
+
+    @Override
+    public StringBuilder visitExpressionList(final TygerParser.ExpressionListContext ctx) {
+        ctx.expression().accept(this);
+        if (ctx.expressionList() != null) {
+            ctx.expressionList().accept(this);
+        }
         return builder;
     }
 }
