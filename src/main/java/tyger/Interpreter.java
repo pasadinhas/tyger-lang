@@ -1,5 +1,6 @@
 package tyger;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -12,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import tyger.TygerParser.ProgContext;
+import tyger.codegen.JvmClassVisitor;
 
 public class Interpreter {
     
@@ -23,7 +25,7 @@ public class Interpreter {
             return;
         }
 
-        if (!Set.of("run", "tree", "type-check").contains(args[0])) {
+        if (!Set.of("run", "tree", "type-check", "com", "compile").contains(args[0])) {
             logger.error("Invalid <action>: {}", args[0]);
             usage();
             return;
@@ -62,6 +64,11 @@ public class Interpreter {
                 case "type-check":
                     TypeCheckVisitor.Type type = prog.accept(new TypeCheckVisitor(filepath, source));
                     logger.info("Type: {}", type);
+                    break;
+                case "com":
+                case "compile":
+                    prog.accept(new TypeCheckVisitor(filepath, source));
+                    prog.accept(new JvmClassVisitor(new File("tyger.class")));
                     break;
                 default:
                     throw new RuntimeException("Compiler action is not implemented: " + action);
