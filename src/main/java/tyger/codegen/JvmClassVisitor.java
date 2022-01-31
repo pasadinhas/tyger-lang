@@ -19,8 +19,11 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
     private final CodeGen code_gen = new CodeGen();
     private final Map<ParserRuleContext, CodeGen.Type> types = new HashMap<>();
 
-    record Method(String name, String signature, CodeGen.Type type) {}
-    private final Map<String, Method> methods = new HashMap<>();
+    record MethodDefinition(String name, String signature, CodeGen.Type type) {}
+    private final Map<String, MethodDefinition> method_definitions = new HashMap<>();
+
+    record MethodCode(MethodDefinition definition, byte[] code, int max_stack_size, int max_local_variables) {}
+    private final Map<String, MethodCode> methods_code = new HashMap<>();
 
     public JvmClassVisitor(final File file) {
         this.file = file;
@@ -40,19 +43,24 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
                 max = 0;
             }
 
+            void log() {
+                // logger.debug("OperandStack[size={},max={}]", size, max);
+            }
+
             int grow() {
                 max = Math.max(++size, max);
+                log();
                 return size;
             }
 
             int shrink() {
-                assert size > 0;
-                return --size;
+                return shrink(1);
             }
 
             int shrink(int n) {
                 assert size > n - 1;
                 size -= n;
+                log();
                 return size;
             }
         }
@@ -80,13 +88,17 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         private static final byte irem = 0x70;
         private static final byte if_icmpne = (byte) 0xa0;
         private static final byte _goto = (byte) 0xa7;
+        private static final byte ireturn = (byte) 0xac;
+        private static final byte _return = (byte) 0xb1;
+        private static final byte getstatic = (byte) 0xb2;
+        private static final byte invokevirtual = (byte) 0xb6;
         private static final byte invokestatic = (byte) 0xb8;
 
         record R0(int position) {}
         record R1(int position, int op_1) {}
         record R2(int position, int op_1, int op_2) {}
 
-        private enum Type { I, Z }
+        private enum Type { I, Z, V }
         private final ArrayList<Byte> function_code = new ArrayList<>(1024 * 1024); // 1MB initial capacity.
 
         private void log(String format, Object... args) {
@@ -188,8 +200,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
 
         R1 if_icmpne(int jumpTo) {
             log("if_icmpne {}", jumpTo);
-            operand_stack.shrink();
-            operand_stack.shrink();
+            operand_stack.shrink(2);
             return instruction_2(if_icmpne, jumpTo);
         }
 
@@ -238,6 +249,29 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
             return instruction_0(irem);
         }
 
+        R0 ireturn() {
+            log("ireturn");
+            operand_stack.shrink();
+            return instruction_0(ireturn);
+        }
+
+        R0 _return() {
+            log("return");
+            return instruction_0(_return);
+        }
+
+        R1 getstatic(int index) {
+            log("getstatic #{}", index);
+            operand_stack.grow();
+            return instruction_2(getstatic, index);
+        }
+
+        R1 invokevirtual(int index, int number_of_arguments) {
+            log("invokevirtual #{}", index);
+            operand_stack.shrink(number_of_arguments - 1); // pops number_of_arguments and pushes one value
+            return instruction_2(invokevirtual, index);
+        }
+
         R1 invokestatic(int index, int number_of_arguments) {
             log("invokestatic #{}", index);
             operand_stack.shrink(number_of_arguments - 1); // pops number_of_arguments and pushes one value
@@ -248,14 +282,17 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
             return function_code.size();
         }
 
-        void set_to_current_position(int location) {
-            update_2(location, position());
+        void set_jump_offset(R1 operation) {
+            update_2(operation.op_1, position() - operation.position);
         }
 
         void update_2(int location, int value) {
             assert value <= 0xFFFF; // 2 bytes
 
-            log(location, "UPDATE: {}", value);
+            log(location, "UPDATE: {} (0x{})", value, HexFormat.of().formatHex(new byte[]{
+                    (byte) (value >>> 8),
+                    (byte) (value >>> 0)
+            }));
 
             function_code.set(location,     (byte) (value >>> 8));
             function_code.set(location + 1, (byte) (value >>> 0));
@@ -295,6 +332,14 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
                 case "bool" -> Type.Z;
                 default -> throw new RuntimeException("Conversion of type " + type + " is not implemented yet.");
             };
+        }
+
+        byte[] to_byte_array() {
+            final byte[] bytes = new byte[function_code.size()];
+            for (int i = 0; i < bytes.length; i++) {
+                bytes[i] = function_code.get(i);
+            }
+            return bytes;
         }
     }
 
@@ -345,6 +390,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         enum ConstantPoolObjectKind {
             CLASS(0x07),
             UTF8(0x01),
+            FIELD_REF(0x09),
             METHOD_REF(0x0A),
             NAME_AND_TYPE(0x0C)
             ;
@@ -358,6 +404,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
 
         record Class (String name) {}
         record Utf8 (String value) {}
+        record FieldRef(String className, String fieldName, String type) {}
         record MethodRef(String className, String methodName, String type) {}
         record NameAndType(String methodName, String type) {}
 
@@ -458,6 +505,41 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
             return constant_pool_lookup_table.get(constant_pool_object);
         }
 
+        int add_field_ref(String className, String fieldName, String type) {
+            final FieldRef constant_pool_object = new FieldRef(className, fieldName, type);
+
+            if (constant_pool_lookup_table.containsKey(constant_pool_object)) {
+                final Integer index = constant_pool_lookup_table.get(constant_pool_object);
+                logger.debug("FieldRef {}.{}{} was already registered in #{}", className, fieldName, type, index);
+                return index;
+            }
+
+            constant_pool_size += 1;
+            constant_pool_lookup_table.put(constant_pool_object, constant_pool_size);
+
+            // start writing a method ref object in the constant pool
+            constant_pool.add(ConstantPoolObjectKind.FIELD_REF.code);
+
+            // placeholder for: Class & NameAndType
+            final int refs_index = constant_pool.size();
+            constant_pool.add((byte) 0); // Class
+            constant_pool.add((byte) 0); // Class
+            constant_pool.add((byte) 0); // NameAndType
+            constant_pool.add((byte) 0); // NameAndType
+
+            // add Class and NameAndType
+            final int class_index = add_class(className);
+            final int name_and_type_index = add_name_and_type(fieldName, type);
+
+            // update the placeholders
+            constant_pool.set(refs_index, (byte) (class_index >>> 8));
+            constant_pool.set(refs_index + 1, (byte) (class_index >>> 0));
+            constant_pool.set(refs_index + 2, (byte) (name_and_type_index >>> 8));
+            constant_pool.set(refs_index + 3, (byte) (name_and_type_index >>> 0));
+
+            return constant_pool_lookup_table.get(constant_pool_object);
+        }
+
         private int add_name_and_type(final String methodName, final String type) {
             final NameAndType constant_pool_object = new NameAndType(methodName, type);
 
@@ -534,6 +616,28 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         outputStream.write(bytes);
     }
 
+    void generate_main_method() {
+        code_gen.reset();
+
+        var system_out = constant_pool.add_field_ref("java/lang/System", "out", "Ljava/io/PrintStream;");
+        var println = constant_pool.add_method_ref("java/io/PrintStream", "println", "(I)V");
+        var tyger_main = constant_pool.add_method_ref(generatedClassName, "main", "()I");
+
+        code_gen.getstatic(system_out);
+        code_gen.invokestatic(tyger_main, 0);
+        code_gen.invokevirtual(println, 1);
+        code_gen._return();
+
+        var method_definition = new MethodDefinition("main", "([Ljava/lang/String;)V", CodeGen.Type.V);
+        constant_pool.add_method_ref(generatedClassName, method_definition.name, method_definition.signature);
+        methods_code.put(method_definition.name + ":" + method_definition.signature, new MethodCode(
+                method_definition,
+                code_gen.to_byte_array(),
+                code_gen.operand_stack.max,
+                1
+        ));
+    }
+
     @Override
     public Integer visitProg(final TygerParser.ProgContext ctx) {
         register_all_methods(ctx.functionDeclarationExpression());
@@ -544,40 +648,59 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
                 .max(Integer::compareTo)
                 .orElseThrow();
 
+        generate_main_method();
         constant_pool.add_class(generatedClassName);
+        final int java_lang_object_index = constant_pool.add_class("java/lang/Object");
 
         try (FileOutputStream fos = new FileOutputStream(file);
              BufferedOutputStream os = new BufferedOutputStream(fos)
         ) {
 
-            write_4(os, 0xCA_FE_BA_BE);                 // Magic Number, the famous CAFE BABE
-            write_4(os, 0x00_00_00_3D);                 // Version: Java 17
+            write_4(os, 0xCA_FE_BA_BE);                                     // Magic Number, the famous CAFE BABE
+            write_4(os, 0x00_00_00_3D);                                     // Version: Java 17
 
-            write_2(os, constant_pool.size() + 1);      // Constants Pool size
-            os.write(constant_pool.to_byte_array());    // Write the Constant Pool
+            write_2(os, constant_pool.size() + 1);                          // Constants Pool size
+            os.write(constant_pool.to_byte_array());                        // Write the Constant Pool
 
-            write_2(os, 0x10_11);                       // Modifiers: SYNTHETIC, FINAL, PUBLIC
-            write_2(os, constant_pool.index_of(         // This class, in the Constants Pool
+            write_2(os, 0x10_11);                                           // Modifiers: SYNTHETIC, FINAL, PUBLIC
+            write_2(os, constant_pool.index_of(                             // This class, in the Constants Pool
                     new ConstantPool.Class(generatedClassName)
             ));
-            write_2(os, 0x00_00);                       // Super class, in the Constants Pool
+            write_2(os, java_lang_object_index);                            // Super class, in the Constants Pool
 
-            write_2(os, 0x00_00);                       // Number of interfaces
-            write_2(os, 0x00_00);                       // Number of fields
+            write_2(os, 0x00_00);                                           // Number of interfaces
+            write_2(os, 0x00_00);                                           // Number of fields
 
-            write_2(os, methods.size());                // Number of methods
-            for (final Method method : methods.values()) {
-                write_2(os, 0x0009);                    // access modifiers: public static
-                write_2(os, constant_pool.index_of(     // method name
-                        new ConstantPool.Utf8(method.name)
+            write_2(os, methods_code.size());                               // Number of methods
+            for (final MethodCode method : methods_code.values()) {
+                write_2(os, 0x0009);                                        // access modifiers: public static
+                write_2(os, constant_pool.index_of(                         // method name
+                        new ConstantPool.Utf8(method.definition.name)
                 ));
-                write_2(os, constant_pool.index_of(     // type descriptor
-                        new ConstantPool.Utf8(method.signature)
+                write_2(os, constant_pool.index_of(                         // type descriptor
+                        new ConstantPool.Utf8(method.definition.signature)
                 ));
-                write_2(os, 0x0000);                    // Number of method attributes
+                write_2(os, 0x0001);                                        // Number of method attributes: 1 (Code attribute)
+                write_2(os, constant_pool.index_of(
+                        new ConstantPool.Utf8("Code")
+                ));
+                write_4(os,                                                 // Size of "Code" attribute:
+                        2 +                                                 // - max_stack_size
+                        2 +                                                 // - max_local_variables
+                        4 +                                                 // - size of code
+                        method.code.length +                                // - actual code
+                        2 +                                                 // - exception table: 0
+                        2                                                   // - number of attributes: 0
+                );
+                write_2(os, method.max_stack_size);                         // Max Stack Size
+                write_2(os, method.max_local_variables);                    // Max Local Variables
+                write_4(os, method.code.length);                            // Method Code length
+                os.write(method.code);                                      // Method Code
+                write_2(os, 0x0000);                                        // Exception table
+                write_2(os, 0x0000);                                        // Number of Attributes: 0
             }
 
-            write_2(os, 0x00_00);                       // Number of attributes
+            write_2(os, 0x00_00);                                           // Number of attributes
 
         } catch (final IOException e) {
             throw new RuntimeException(e);
@@ -592,7 +715,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
             final String method_name = ctx.identifier().getText();
             final CodeGen.Type return_type = code_gen.jvm_type(ctx.typeIdentifier().getText());
 
-            methods.put(method_name, new Method(method_name, signature, return_type));
+            method_definitions.put(method_name, new MethodDefinition(method_name, signature, return_type));
         });
     }
 
@@ -604,13 +727,15 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
 
         local_variables.scope_push();
 
-        final Method method = methods.get(ctx.identifier().getText());
+        final MethodDefinition method_definition = method_definitions.get(ctx.identifier().getText());
 
-        constant_pool.add_method_ref(generatedClassName, method.name, method.signature);
+        constant_pool.add_method_ref(generatedClassName, method_definition.name, method_definition.signature);
         constant_pool.add_utf_8("Code");
 
         var argsList = ctx.argsList();
+        int number_of_arguments = 0;
         while (argsList != null) {
+            number_of_arguments++;
             final CodeGen.Type type = code_gen.jvm_type(argsList.typeIdentifier().getText());
             final String name = argsList.identifier().getText();
             local_variables.add(name, type);
@@ -618,12 +743,28 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         }
 
         logger.debug("=".repeat(80));
-        logger.debug("=== {}.{}", method.name, method.signature);
+        logger.debug("=== {}.{}", method_definition.name, method_definition.signature);
         local_variables.scope_peek().values().forEach(local ->
                 logger.debug("=== {}: {} ({})", local.stack_position, local.name, local.type));
         logger.debug("=".repeat(80));
-        var max_stack_size = ctx.blockExpression().accept(this);
 
+        var max_stack_size = ctx.blockExpression().accept(this);
+        switch (method_definition.type) {
+            case I -> code_gen.ireturn();
+            default -> throw new RuntimeException("Code generation for function return is not implemented for type: " + method_definition.type);
+        }
+
+        logger.debug("");
+        logger.debug("var max_stack_size = {}", max_stack_size);
+        logger.debug("code_gen.operand_stack.size = {}", code_gen.operand_stack.size);
+        logger.debug("code_gen.operand_stack.max = {}", code_gen.operand_stack.max);
+
+        methods_code.put(method_definition.name + ":" + method_definition.signature, new MethodCode(
+                method_definition,
+                code_gen.to_byte_array(),
+                code_gen.operand_stack.max,
+                number_of_arguments
+        ));
         return max_stack_size;
     }
 
@@ -661,11 +802,14 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         code_gen.iconst_1(); // stack: condition_result | 1
         CodeGen.R1 if_icmpne = code_gen.if_icmpne(); // stack: Ø
 
+        int stack_size_before_then_block = code_gen.operand_stack.size;
         int max_stack_size_then_block = ctx.block.accept(this);
 
         final CodeGen.R1 _goto = code_gen._goto(); // goto to skip else block.
-        code_gen.set_to_current_position(if_icmpne.op_1); // set if_icmpne jump location
+        code_gen.set_jump_offset(if_icmpne);       // set if_icmpne jump location
 
+        assert code_gen.operand_stack.size == stack_size_before_then_block + 1;
+        code_gen.operand_stack.shrink(); // then-branch and else-branch are mutually exclusive. shrink the operand stack to "drop" the then-branch result
         int max_stack_size_else_block;
         if (ctx.elseBlock != null) {
             max_stack_size_else_block = ctx.elseBlock.accept(this);
@@ -674,13 +818,18 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
             max_stack_size_else_block = 1;
         }
 
-        code_gen.set_to_current_position(_goto.op_1);
+        code_gen.set_jump_offset(_goto);
 
         return IntStream.of(
                 max_stack_size_condition + 1,
                 max_stack_size_then_block,
                 max_stack_size_else_block
         ).max().getAsInt();
+    }
+
+    @Override
+    public Integer visitVariableDeclarationExpression(final TygerParser.VariableDeclarationExpressionContext ctx) {
+        throw new RuntimeException("Generation of variable declarations is not implemented yet.");
     }
 
     @Override
@@ -774,9 +923,10 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
                     var if_icmpne = code_gen.if_icmpne();
                     code_gen.iconst_1();
                     var _goto = code_gen._goto();
-                    code_gen.set_to_current_position(if_icmpne.op_1);
+                    code_gen.set_jump_offset(if_icmpne);
+                    code_gen.operand_stack.shrink(); // only one of the constants is pushed
                     code_gen.iconst_0();
-                    code_gen.set_to_current_position(_goto.op_1);
+                    code_gen.set_jump_offset(_goto);
                     yield 0;
                 } else {
                     throw not_implemented;
@@ -803,8 +953,8 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
     @Override
     public Integer visitFunctionCallExpression(final TygerParser.FunctionCallExpressionContext ctx) {
         final List<CodeGen.Type> argumentTypes = new ArrayList<>();
-        final Method method = methods.get(ctx.identifier().getText());
-        types.put(ctx, method.type);
+        final MethodDefinition method_definition = method_definitions.get(ctx.identifier().getText());
+        types.put(ctx, method_definition.type);
 
         int number_of_arguments = 0;
         TygerParser.ExpressionListContext argumentExpression = ctx.expressionList();
@@ -815,7 +965,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
             argumentExpression = argumentExpression.expressionList();
         }
 
-        int index = constant_pool.add_method_ref(generatedClassName, method.name, method.signature);
+        int index = constant_pool.add_method_ref(generatedClassName, method_definition.name, method_definition.signature);
         code_gen.invokestatic(index, number_of_arguments);
 
         return Math.max(number_of_arguments, 1);
