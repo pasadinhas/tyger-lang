@@ -3,6 +3,7 @@ func int main() {
 }
 
 func int factorial(int n) {
+    2 + 2;
     if (n == 1) {
         1
     } else {

@@ -26,21 +26,21 @@ expression
 //   | 'break' expression?                                                            # BreakExpression
    | blockExpression                                                                # BlockExpression_
    | '(' expression ')'                                                             # GroupedExpression 
-   | expression ';'                                                                 # GroupedExpression
    | expression op=('--' | '++')                                                    # PostfixUnaryExpression
    | op=('-' | 'not' | '--' | '++') expression                                      # PrefixUnaryExpression
-   | left=expression op=('*' | '/' | '%') right=expression                          # BinaryExpression 
-   | left=expression op=('+' | '-') right=expression                                # BinaryExpression 
-   | left=expression op=('>>' | '<<') right=expression                              # BinaryExpression 
-   | left=expression op='&' right=expression                                        # BinaryExpression 
-   | left=expression op='^' right=expression                                        # BinaryExpression 
-   | left=expression op='|' right=expression                                        # BinaryExpression 
-   | left=expression op=('==' | '!=' | '<' | '<=' | '>' | '>=') right=expression    # BinaryExpression 
+   | left=expression op=('*' | '/' | '%') right=expression                          # BinaryExpression
+   | left=expression op=('+' | '-') right=expression                                # BinaryExpression
+   | left=expression op=('>>' | '<<') right=expression                              # BinaryExpression
+   | left=expression op='&' right=expression                                        # BinaryExpression
+   | left=expression op='^' right=expression                                        # BinaryExpression
+   | left=expression op='|' right=expression                                        # BinaryExpression
+   | left=expression op=('==' | '!=' | '<' | '<=' | '>' | '>=') right=expression    # BinaryExpression
    | left=expression op='and' right=expression                                      # BinaryExpression
    | left=expression op='or' right=expression                                       # BinaryExpression
    | type=typeIdentifier identifier '=' expression                                  # VariableDeclarationExpression
    | identifier '=' expression                                                      # AssignmentExpression
-   | ifExpression                                                                   # IfExpression_ 
+   | ifExpression                                                                   # IfExpression_
+   | expression ';'                                                                 # GroupedExpression
    ;
 
 expressionList

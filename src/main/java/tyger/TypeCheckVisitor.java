@@ -25,6 +25,7 @@ import tyger.TygerParser.WhileExpressionContext;
 public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
     private record Function(String name, Type type, Map<String, Type> arguments) {}
+    // TODO: separate variables from function arguments. Cannot overshadow function arguments.
     private record Scope(Map<String, Type> variables, Map<String, Function> functions) {
         Scope() {
             this(new HashMap<>(), new HashMap<>());
