@@ -1,0 +1,3 @@
+module ab.asd.ion.asd
+
+func int main() { 0 }

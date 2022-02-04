@@ -1,0 +1,5 @@
+module ast
+
+func int double(int n) {
+    n * 2
+}

@@ -13,8 +13,8 @@ import java.util.stream.IntStream;
 
 public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
     private static final Logger logger = LoggerFactory.getLogger(JvmClassVisitor.class);
-    private final String generatedClassName = "tyger";
     private final File file;
+    private final String module_name;
     private final ConstantPool constant_pool = new ConstantPool();
     private final CodeGen code_gen = new CodeGen();
     private final Map<ParserRuleContext, CodeGen.Type> types = new HashMap<>();
@@ -25,8 +25,9 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
     record MethodCode(MethodDefinition definition, byte[] code, int max_stack_size, int max_local_variables) {}
     private final Map<String, MethodCode> methods_code = new HashMap<>();
 
-    public JvmClassVisitor(final File file) {
-        this.file = file;
+    public JvmClassVisitor(final String module_name) {
+        this.file = new File(module_name + ".class");
+        this.module_name = module_name;
     }
 
     static class CodeGen {
@@ -621,7 +622,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
 
         var system_out = constant_pool.add_field_ref("java/lang/System", "out", "Ljava/io/PrintStream;");
         var println = constant_pool.add_method_ref("java/io/PrintStream", "println", "(I)V");
-        var tyger_main = constant_pool.add_method_ref(generatedClassName, "main", "()I");
+        var tyger_main = constant_pool.add_method_ref(module_name, "main", "()I");
 
         code_gen.getstatic(system_out);
         code_gen.invokestatic(tyger_main, 0);
@@ -629,7 +630,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         code_gen._return();
 
         var method_definition = new MethodDefinition("main", "([Ljava/lang/String;)V", CodeGen.Type.V);
-        constant_pool.add_method_ref(generatedClassName, method_definition.name, method_definition.signature);
+        constant_pool.add_method_ref(module_name, method_definition.name, method_definition.signature);
         methods_code.put(method_definition.name + ":" + method_definition.signature, new MethodCode(
                 method_definition,
                 code_gen.to_byte_array(),
@@ -639,7 +640,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
     }
 
     @Override
-    public Integer visitProg(final TygerParser.ProgContext ctx) {
+    public Integer visitModule(final TygerParser.ModuleContext ctx) {
         register_all_methods(ctx.functionDeclarationExpression());
 
         // Visit all function declarations and register the max stack size.
@@ -649,7 +650,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
                 .orElseThrow();
 
         generate_main_method();
-        constant_pool.add_class(generatedClassName);
+        constant_pool.add_class(module_name);
         final int java_lang_object_index = constant_pool.add_class("java/lang/Object");
 
         try (FileOutputStream fos = new FileOutputStream(file);
@@ -664,7 +665,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
 
             write_2(os, 0x10_11);                                           // Modifiers: SYNTHETIC, FINAL, PUBLIC
             write_2(os, constant_pool.index_of(                             // This class, in the Constants Pool
-                    new ConstantPool.Class(generatedClassName)
+                    new ConstantPool.Class(module_name)
             ));
             write_2(os, java_lang_object_index);                            // Super class, in the Constants Pool
 
@@ -729,7 +730,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
 
         final MethodDefinition method_definition = method_definitions.get(ctx.identifier().getText());
 
-        constant_pool.add_method_ref(generatedClassName, method_definition.name, method_definition.signature);
+        constant_pool.add_method_ref(module_name, method_definition.name, method_definition.signature);
         constant_pool.add_utf_8("Code");
 
         var argsList = ctx.argsList();
@@ -965,7 +966,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
             argumentExpression = argumentExpression.expressionList();
         }
 
-        int index = constant_pool.add_method_ref(generatedClassName, method_definition.name, method_definition.signature);
+        int index = constant_pool.add_method_ref(module_name, method_definition.name, method_definition.signature);
         code_gen.invokestatic(index, number_of_arguments);
 
         return Math.max(number_of_arguments, 1);

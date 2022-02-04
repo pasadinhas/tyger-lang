@@ -166,7 +166,7 @@ public class InterpreterVisitor extends TygerBaseVisitor<Object> {
     }
 
     @Override
-    public Object visitProg(final ProgContext ctx) {
+    public Object visitModule(final ModuleContext ctx) {
         scope_push();
 
         ctx.functionDeclarationExpression().forEach(function -> {

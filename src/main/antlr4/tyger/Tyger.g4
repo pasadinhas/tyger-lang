@@ -1,7 +1,13 @@
 // Define a grammar called Hello
 grammar Tyger;
 
-prog : functionDeclarationExpression+ EOF;
+module : moduleDeclaration functionDeclarationExpression+ EOF;
+
+moduleDeclaration
+    : 'module' moduleIdentifier ';'?
+    ;
+
+moduleIdentifier : IDENTIFIER ('.' IDENTIFIER)* ;
 
 blockExpression
     : '{' expression* '}'
@@ -76,15 +82,17 @@ INTEGER_LITERAL
     : DEC_LITERAL 
     ;
 
-DEC_LITERAL: DEC_DIGIT (DEC_DIGIT | '_')*;
+DEC_LITERAL: DecimalDigit (DecimalDigit | '_')*;
 
 BOOLEAN_LITERAL
     : 'true'
     | 'false'
     ;
 
-IDENTIFIER: [a-zA-Z_]+;
+IDENTIFIER: Letter LetterOrDigit*;
 
-fragment DEC_DIGIT : [0-9] ;
+fragment DecimalDigit : [0-9] ;
+fragment Letter : [a-zA-Z_];
+fragment LetterOrDigit: Letter | DecimalDigit;
 
 WS : [ \t\r\n]+ -> skip ; // skip spaces, tabs, newlines

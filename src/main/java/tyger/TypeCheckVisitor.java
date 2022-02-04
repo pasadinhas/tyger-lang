@@ -3,8 +3,6 @@ package tyger;
 import java.util.*;
 
 import org.antlr.v4.runtime.ParserRuleContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import tyger.TygerParser.ArgsListContext;
 import tyger.TygerParser.AssignmentExpressionContext;
@@ -18,9 +16,11 @@ import tyger.TygerParser.LiteralExpressionContext;
 import tyger.TygerParser.PostfixUnaryExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
 import tyger.TygerParser.PrintExpressionContext;
-import tyger.TygerParser.ProgContext;
+import tyger.TygerParser.ModuleContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
 import tyger.TygerParser.WhileExpressionContext;
+import tyger.ast.AstNode;
+import tyger.ast.visitor.ErrorReporter;
 
 public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
@@ -32,13 +32,6 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         }
     }
 
-    private static final String COLOR_BRIGHT_RED = "\u001b[31;1m";
-    private static final String COLOR_RESET = "\u001b[0m";
-
-    private static final int COMPILER_ERROR_LINES_AROUND = 7;
-
-    private static final Logger logger = LoggerFactory.getLogger(TypeCheckVisitor.class);
-    
     /**
      * Stack of last seen loops. Used to know to which loop a break expression belongs.
      */
@@ -171,10 +164,12 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     private final String filename;
     private final String source;
     private final LinkedList<Scope> scopes = new LinkedList<>();
+    private final ErrorReporter error_reporter;
 
     public TypeCheckVisitor(String filename, String source) {
         this.filename = filename;
         this.source = source;
+        this.error_reporter = new ErrorReporter(filename, source);
     }
 
     private Optional<Type> findVariable(String name) {
@@ -236,7 +231,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
     }
 
     @Override
-    public Type visitProg(ProgContext ctx) {
+    public Type visitModule(ModuleContext ctx) {
         scope_push();
 
         ctx.functionDeclarationExpression().forEach(function -> {
@@ -447,63 +442,15 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         int errorStartLineStartChar = ctx.start.getCharPositionInLine();
         int errorStopLine = ctx.stop.getLine();
         int errorStopLineStopChar = ctx.stop.getCharPositionInLine() + ctx.stop.getText().length();
-        
-        String[] sourceCodeLines = source.split("\n");
 
-        int outputStartLine = Math.max(1, errorStartLine - COMPILER_ERROR_LINES_AROUND);
-        int outputStopLine = Math.min(sourceCodeLines.length, errorStopLine + COMPILER_ERROR_LINES_AROUND);
-        
-        int lineNumberDigits = outputStopLine / 10;
+        final AstNode.Loc loc = new AstNode.Loc(
+                errorStartLine,
+                errorStartLineStartChar,
+                errorStopLine,
+                errorStopLineStopChar
+        );
 
-        StringBuilder errorMessage = new StringBuilder("\n")
-                .append(COLOR_BRIGHT_RED)
-                .append("Compilation error [")
-                .append(filename)
-                .append(":")
-                .append(errorStartLine)
-                .append("]: ")
-                .append(COLOR_RESET)
-                .append(String.format(format, args))
-                .append("\n\n");
-
-
-
-        for (int lineNumber = outputStartLine; lineNumber <= outputStopLine; lineNumber++) {
-            int lineNumberWhitespacePadding = lineNumberDigits - lineNumber / 10;
-            errorMessage.append(" ".repeat(Math.max(0, lineNumberWhitespacePadding)));
-
-            errorMessage.append(lineNumber)
-                .append(": ");
-
-            String line = sourceCodeLines[lineNumber - 1];
-
-            if (lineNumber >= errorStartLine && lineNumber <= errorStopLine) {
-                if (lineNumber > errorStartLine) {
-                    errorMessage.append(COLOR_BRIGHT_RED);
-                }
-
-                for (int charIndex = 0; charIndex < line.length(); charIndex++) {
-                    if (lineNumber == errorStartLine && charIndex == errorStartLineStartChar) {
-                        errorMessage.append(COLOR_BRIGHT_RED);
-                    }
-
-                    errorMessage.append(line.charAt(charIndex));
-
-                    if (lineNumber == errorStopLine && charIndex == errorStopLineStopChar - 1) {
-                        // Reset color
-                        errorMessage.append(COLOR_RESET);
-                    } 
-                }
-                errorMessage.append(COLOR_RESET);
-                errorMessage.append('\n');
-            } else {
-                errorMessage.append(line).append('\n');
-            }
-        }
-
-        logger.error("{}", errorMessage);
-        
-        throw new RuntimeException(String.format(format, args));
+        return error_reporter.compiler_error(loc, format, args);
     }
 
     public Type visitWhileExpression(WhileExpressionContext ctx) {

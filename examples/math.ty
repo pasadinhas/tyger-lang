@@ -1,0 +1,25 @@
+module asd.gaf.d
+
+func int main() {
+    factorial(10) + fib(10)
+}
+
+func int factorial(int n) {
+    if (n == 1) {
+        1
+    } else {
+        n * factorial(n - 1)
+    }
+}
+
+func int fib(int n) {
+    if n == 0 {
+        n
+    } else {
+        if n == 1 {
+            n
+        } else {
+            fib(n - 1) + fib(n - 2)
+        }
+    }
+}

@@ -59,7 +59,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>tyger.Interpreter</mainClass>
+                            <mainClass>tyger.Tyger</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>

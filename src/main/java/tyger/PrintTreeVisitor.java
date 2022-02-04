@@ -12,7 +12,7 @@ import tyger.TygerParser.LiteralExpressionContext;
 import tyger.TygerParser.PostfixUnaryExpressionContext;
 import tyger.TygerParser.PrefixUnaryExpressionContext;
 import tyger.TygerParser.PrintExpressionContext;
-import tyger.TygerParser.ProgContext;
+import tyger.TygerParser.ModuleContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
 import tyger.TygerParser.WhileExpressionContext;
 
@@ -46,11 +46,11 @@ public class PrintTreeVisitor extends TygerBaseVisitor<StringBuilder> {
     }
 
     @Override
-    public StringBuilder visitProg(ProgContext ctx) {
-        write("<Program>");
+    public StringBuilder visitModule(ModuleContext ctx) {
+        write("<Module>");
         withIndentation(() ->
                 ctx.functionDeclarationExpression().forEach(function -> function.accept(this)));
-        write("</Program>");
+        write("</Module>");
         return builder;
     }    
 
