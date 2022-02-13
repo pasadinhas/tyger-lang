@@ -17,9 +17,9 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
     private final String module_name;
     private final ConstantPool constant_pool = new ConstantPool();
     private final CodeGen code_gen = new CodeGen();
-    private final Map<ParserRuleContext, CodeGen.Type> types = new HashMap<>();
+    private final Map<ParserRuleContext, Type> types = new HashMap<>();
 
-    record MethodDefinition(String name, String signature, CodeGen.Type type) {}
+    record MethodDefinition(String name, String signature, Type type) {}
     private final Map<String, MethodDefinition> method_definitions = new HashMap<>();
 
     record MethodCode(MethodDefinition definition, byte[] code, int max_stack_size, int max_local_variables) {}
@@ -30,322 +30,20 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         this.module_name = module_name;
     }
 
-    static class CodeGen {
-        private static final Logger logger = LoggerFactory.getLogger(CodeGen.class);
-
-        final OperandStack operand_stack = new OperandStack();
-
-        static class OperandStack {
-            int size = 0;
-            int max = 0;
-
-            void reset() {
-                size = 0;
-                max = 0;
-            }
-
-            void log() {
-                // logger.debug("OperandStack[size={},max={}]", size, max);
-            }
-
-            int grow() {
-                max = Math.max(++size, max);
-                log();
-                return size;
-            }
-
-            int shrink() {
-                return shrink(1);
-            }
-
-            int shrink(int n) {
-                assert size > n - 1;
-                size -= n;
-                log();
-                return size;
-            }
-        }
-
-        // jvm instructions
-        private static final byte aconst_null = 0x01;
-        private static final byte iconst_0 = 0x03;
-        private static final byte iconst_1 = 0x04;
-        private static final byte iconst_2 = 0x05;
-        private static final byte iconst_3 = 0x06;
-        private static final byte iconst_4 = 0x07;
-        private static final byte iconst_5 = 0x08;
-        private static final byte bipush = 0x10;
-        private static final byte sipush = 0x11;
-        private static final byte iload = 0x15;
-        private static final byte iload_0 = 0x1a;
-        private static final byte iload_1 = 0x1b;
-        private static final byte iload_2 = 0x1c;
-        private static final byte iload_3 = 0x1d;
-        private static final byte pop = 0x57;
-        private static final byte iadd = 0x60;
-        private static final byte isub = 0x64;
-        private static final byte idiv = 0x6c;
-        private static final byte imul = 0x68;
-        private static final byte irem = 0x70;
-        private static final byte if_icmpne = (byte) 0xa0;
-        private static final byte _goto = (byte) 0xa7;
-        private static final byte ireturn = (byte) 0xac;
-        private static final byte _return = (byte) 0xb1;
-        private static final byte getstatic = (byte) 0xb2;
-        private static final byte invokevirtual = (byte) 0xb6;
-        private static final byte invokestatic = (byte) 0xb8;
-
-        record R0(int position) {}
-        record R1(int position, int op_1) {}
-        record R2(int position, int op_1, int op_2) {}
-
-        private enum Type { I, Z, V }
-        private final ArrayList<Byte> function_code = new ArrayList<>(1024 * 1024); // 1MB initial capacity.
-
-        private void log(String format, Object... args) {
-            log(position(), format, args);
-        }
-
-        private void log(int position, String format, Object... args) {
-            logger.debug(String.format("%3d: ", position) + format, args);
-        }
-
-        R0 aconst_null() {
-            log("aconst_null");
-            operand_stack.grow();
-            return instruction_0(aconst_null);
-        }
-
-        R0 iconst_0() {
-            log("iconst_0");
-            operand_stack.grow();
-            return instruction_0(iconst_0);
-        }
-
-        R0 iconst_1() {
-            log("iconst_1");
-            operand_stack.grow();
-            return instruction_0(iconst_1);
-        }
-
-        R0 iconst_2() {
-            log("iconst_2");
-            operand_stack.grow();
-            return instruction_0(iconst_2);
-        }
-
-        R0 iconst_3() {
-            log("iconst_3");
-            operand_stack.grow();
-            return instruction_0(iconst_3);
-        }
-
-        R0 iconst_4() {
-            log("iconst_4");
-            operand_stack.grow();
-            return instruction_0(iconst_4);
-        }
-
-        R0 iconst_5() {
-            log("iconst_5");
-            operand_stack.grow();
-            return instruction_0(iconst_5);
-        }
-
-        R1 bipush(int value) {
-            log("bipush {}", value);
-            operand_stack.grow();
-            return instruction_1(bipush, value);
-        }
-
-        R1 sipush(int value) {
-            log("sipush {}", value);
-            operand_stack.grow();
-            return instruction_2(sipush, value);
-        }
-
-        R1 iload(int index) {
-            assert index > 3;
-            log("iload {}", index);
-            operand_stack.grow();
-            return instruction_1(iload, index);
-        }
-
-        R0 iload_0() {
-            log("iload_0");
-            operand_stack.grow();
-            return instruction_0(iload_0);
-        }
-
-        R0 iload_1() {
-            log("iload_1");
-            operand_stack.grow();
-            return instruction_0(iload_1);
-        }
-
-        R0 iload_2() {
-            log("iload_2");
-            operand_stack.grow();
-            return instruction_0(iload_2);
-        }
-
-        R0 iload_3() {
-            log("iload_3");
-            operand_stack.grow();
-            return instruction_0(iload_3);
-        }
-
-        R1 if_icmpne() {
-            return if_icmpne(0x0000);
-        }
-
-        R1 if_icmpne(int jumpTo) {
-            log("if_icmpne {}", jumpTo);
-            operand_stack.shrink(2);
-            return instruction_2(if_icmpne, jumpTo);
-        }
-
-        R1 _goto() {
-            return _goto(0x0000);
-        }
-
-        R1 _goto(int jumpTo) {
-            log("goto {}", jumpTo);
-            return instruction_2(_goto, jumpTo);
-        }
-
-        R0 pop() {
-            log("pop");
-            operand_stack.shrink();
-            return instruction_0(pop);
-        }
-
-        R0 iadd() {
-            log("iadd");
-            operand_stack.shrink(); // 2 pops and 1 push
-            return instruction_0(iadd);
-        }
-
-        R0 isub() {
-            log("isub");
-            operand_stack.shrink(); // 2 pops and 1 push
-            return instruction_0(isub);
-        }
-
-        R0 idiv() {
-            log("idiv");
-            operand_stack.shrink(); // 2 pops and 1 push
-            return instruction_0(idiv);
-        }
-
-        R0 imul() {
-            log("imul");
-            operand_stack.shrink(); // 2 pops and 1 push
-            return instruction_0(imul);
-        }
-
-        R0 irem() {
-            log("irem");
-            operand_stack.shrink(); // 2 pops and 1 push
-            return instruction_0(irem);
-        }
-
-        R0 ireturn() {
-            log("ireturn");
-            operand_stack.shrink();
-            return instruction_0(ireturn);
-        }
-
-        R0 _return() {
-            log("return");
-            return instruction_0(_return);
-        }
-
-        R1 getstatic(int index) {
-            log("getstatic #{}", index);
-            operand_stack.grow();
-            return instruction_2(getstatic, index);
-        }
-
-        R1 invokevirtual(int index, int number_of_arguments) {
-            log("invokevirtual #{}", index);
-            operand_stack.shrink(number_of_arguments - 1); // pops number_of_arguments and pushes one value
-            return instruction_2(invokevirtual, index);
-        }
-
-        R1 invokestatic(int index, int number_of_arguments) {
-            log("invokestatic #{}", index);
-            operand_stack.shrink(number_of_arguments - 1); // pops number_of_arguments and pushes one value
-            return instruction_2(invokestatic, index);
-        }
-
-        int position() {
-            return function_code.size();
-        }
-
-        void set_jump_offset(R1 operation) {
-            update_2(operation.op_1, position() - operation.position);
-        }
-
-        void update_2(int location, int value) {
-            assert value <= 0xFFFF; // 2 bytes
-
-            log(location, "UPDATE: {} (0x{})", value, HexFormat.of().formatHex(new byte[]{
-                    (byte) (value >>> 8),
-                    (byte) (value >>> 0)
-            }));
-
-            function_code.set(location,     (byte) (value >>> 8));
-            function_code.set(location + 1, (byte) (value >>> 0));
-        }
-
-        R0 instruction_0(byte instruction) {
-            var position = function_code.size();
-            function_code.add(instruction);
-            return new R0(position);
-        }
-
-        R1 instruction_1(byte instruction, int operand) {
-            assert operand <= 0xFF; // 1 byte
-            var position = function_code.size();
-            function_code.add(instruction);
-            function_code.add((byte) operand);
-            return new R1(position, position + 1);
-        }
-
-        R1 instruction_2(byte instruction, int operands) {
-            assert operands <= 0xFFFF; // 2 bytes
-            var position = function_code.size();
-            function_code.add(instruction);
-            function_code.add((byte) (operands >>> 8));
-            function_code.add((byte) (operands >>> 0));
-            return new R1(position, position + 1);
-        }
-
-        void reset() {
-            function_code.clear();
-            operand_stack.reset();
-        }
-
-        static Type jvm_type(final String type) {
+    private enum Type { 
+        I, Z, V; 
+    
+        static Type from(final String type) {
             return switch (type) {
                 case "int" -> Type.I;
                 case "bool" -> Type.Z;
                 default -> throw new RuntimeException("Conversion of type " + type + " is not implemented yet.");
             };
         }
-
-        byte[] to_byte_array() {
-            final byte[] bytes = new byte[function_code.size()];
-            for (int i = 0; i < bytes.length; i++) {
-                bytes[i] = function_code.get(i);
-            }
-            return bytes;
-        }
     }
-
+    
     static class LocalVariables {
-        record LocalVariable(Integer stack_position, CodeGen.Type type, String name) {}
+        record LocalVariable(Integer stack_position, Type type, String name) {}
         private final LinkedList<Map<String, LocalVariable>> scopes = new LinkedList<>();
         private int stack_position = 0;
 
@@ -358,7 +56,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
             stack_position -= scopes.pop().size();
         }
 
-        void add(final String name, final CodeGen.Type type) {
+        void add(final String name, final Type type) {
             assert scopes.peek() != null;
             scopes.peek().put(name, new LocalVariable(stack_position++, type, name));
         }
@@ -420,7 +118,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         code_gen.invokevirtual(println, 1);
         code_gen._return();
 
-        var method_definition = new MethodDefinition("main", "([Ljava/lang/String;)V", CodeGen.Type.V);
+        var method_definition = new MethodDefinition("main", "([Ljava/lang/String;)V", Type.V);
         constant_pool.add_method_ref(module_name, method_definition.name, method_definition.signature);
         methods_code.put(method_definition.name + ":" + method_definition.signature, new MethodCode(
                 method_definition,
@@ -505,7 +203,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         methodsCtx.forEach(ctx -> {
             final String signature = create_type_signature_string(ctx);
             final String method_name = ctx.identifier().getText();
-            final CodeGen.Type return_type = code_gen.jvm_type(ctx.typeIdentifier().getText());
+            final Type return_type = Type.from(ctx.typeIdentifier().getText());
 
             method_definitions.put(method_name, new MethodDefinition(method_name, signature, return_type));
         });
@@ -528,7 +226,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         int number_of_arguments = 0;
         while (argsList != null) {
             number_of_arguments++;
-            final CodeGen.Type type = code_gen.jvm_type(argsList.typeIdentifier().getText());
+            final Type type = Type.from(argsList.typeIdentifier().getText());
             final String name = argsList.identifier().getText();
             local_variables.add(name, type);
             argsList = argsList.argsList();
@@ -566,15 +264,15 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         builder.append("(");
         var argsList = ctx.argsList();
         while (argsList != null) {
-            builder.append(code_gen.jvm_type(argsList.typeIdentifier().getText()));
+            builder.append(Type.from(argsList.typeIdentifier().getText()));
             argsList = argsList.argsList();
         }
         builder.append(")");
-        builder.append(code_gen.jvm_type(ctx.typeIdentifier().getText()));
+        builder.append(Type.from(ctx.typeIdentifier().getText()));
         return builder.toString();
     }
 
-    private String create_type_signature_string(final CodeGen.Type returnType, final CodeGen.Type... argumentTypes) {
+    private String create_type_signature_string(final Type returnType, final Type... argumentTypes) {
         final StringBuilder builder = new StringBuilder();
         builder.append("(");
         for (int i = 0; i < argumentTypes.length; i++) {
@@ -651,16 +349,16 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         ctx.right.accept(this);
 
         final String operator = ctx.op.getText();
-        final CodeGen.Type type_left = types.get(ctx.left);
-        final CodeGen.Type type_right = types.get(ctx.right);
+        final Type type_left = types.get(ctx.left);
+        final Type type_right = types.get(ctx.right);
 
         final RuntimeException not_implemented = binary_operator_not_implemented(operator, type_left, type_right);
 
         // TODO: replace with table
         var x = switch (operator) {
             case "+" -> {
-                if (type_left == CodeGen.Type.I && type_right == CodeGen.Type.I) {
-                    types.put(ctx, CodeGen.Type.I);
+                if (type_left == Type.I && type_right == Type.I) {
+                    types.put(ctx, Type.I);
                     code_gen.iadd();
                     yield 0;
                 } else {
@@ -668,8 +366,8 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
                 }
             }
             case "-" -> {
-                if (type_left == CodeGen.Type.I && type_right == CodeGen.Type.I) {
-                    types.put(ctx, CodeGen.Type.I);
+                if (type_left == Type.I && type_right == Type.I) {
+                    types.put(ctx, Type.I);
                     code_gen.isub();
                     yield 0;
                 } else {
@@ -677,8 +375,8 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
                 }
             }
             case "/" -> {
-                if (type_left == CodeGen.Type.I && type_right == CodeGen.Type.I) {
-                    types.put(ctx, CodeGen.Type.I);
+                if (type_left == Type.I && type_right == Type.I) {
+                    types.put(ctx, Type.I);
                     code_gen.idiv();
                     yield 0;
                 } else {
@@ -686,8 +384,8 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
                 }
             }
             case "*" -> {
-                if (type_left == CodeGen.Type.I && type_right == CodeGen.Type.I) {
-                    types.put(ctx, CodeGen.Type.I);
+                if (type_left == Type.I && type_right == Type.I) {
+                    types.put(ctx, Type.I);
                     code_gen.imul();
                     yield 0;
                 } else {
@@ -695,8 +393,8 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
                 }
             }
             case "%" -> {
-                if (type_left == CodeGen.Type.I && type_right == CodeGen.Type.I) {
-                    types.put(ctx, CodeGen.Type.I);
+                if (type_left == Type.I && type_right == Type.I) {
+                    types.put(ctx, Type.I);
                     code_gen.irem();
                     yield 0;
                 } else {
@@ -710,8 +408,8 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
             case "and" -> throw not_implemented;
             case "or" -> throw not_implemented;
             case "==" -> {
-                if (type_left == CodeGen.Type.I && type_right == CodeGen.Type.I) {
-                    types.put(ctx, CodeGen.Type.I);
+                if (type_left == Type.I && type_right == Type.I) {
+                    types.put(ctx, Type.I);
                     var if_icmpne = code_gen.if_icmpne();
                     code_gen.iconst_1();
                     var _goto = code_gen._goto();
@@ -735,7 +433,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         return 0;
     }
 
-    RuntimeException binary_operator_not_implemented(String operator, CodeGen.Type left, CodeGen.Type right) {
+    RuntimeException binary_operator_not_implemented(String operator, Type left, Type right) {
         return new RuntimeException(String.format(
                 "Code generation for binary operation `%s %s %s` is not implemented yet.",
                 left, operator, right
@@ -744,7 +442,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
 
     @Override
     public Integer visitFunctionCallExpression(final TygerParser.FunctionCallExpressionContext ctx) {
-        final List<CodeGen.Type> argumentTypes = new ArrayList<>();
+        final List<Type> argumentTypes = new ArrayList<>();
         final MethodDefinition method_definition = method_definitions.get(ctx.identifier().getText());
         types.put(ctx, method_definition.type);
 
@@ -776,7 +474,7 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         final LocalVariables.LocalVariable local = local_variables.get(name);
         types.put(ctx, local.type);
 
-        if (local.type == CodeGen.Type.I) {
+        if (local.type == Type.I) {
             switch (local.stack_position) {
                 case 0 -> code_gen.iload_0();
                 case 1 -> code_gen.iload_1();
@@ -810,14 +508,14 @@ public class JvmClassVisitor extends TygerBaseVisitor<Integer> {
         final String literal = ctx.getText();
 
         if (ctx.BOOLEAN_LITERAL() != null) {
-            types.put(ctx, CodeGen.Type.Z);
+            types.put(ctx, Type.Z);
             if ("true".equals(literal)) {
                 code_gen.iconst_1();
             } else if ("false".equals(literal)) {
                 code_gen.iconst_0();
             }
         } else if (ctx.INTEGER_LITERAL() != null) {
-            types.put(ctx, CodeGen.Type.I);
+            types.put(ctx, Type.I);
             int value = Integer.parseInt(literal);
             if (value == 0) {
                 code_gen.iconst_0();
