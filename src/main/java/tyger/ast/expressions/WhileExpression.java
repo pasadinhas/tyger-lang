@@ -15,6 +15,14 @@ public class WhileExpression extends Expression {
         this.code = code;
     }
 
+    public Expression condition() {
+        return condition;
+    }
+
+    public Expression code() {
+        return code;
+    }
+
     @Override
     public <T> T accept(final AstVisitor<T> visitor) {
         return visitor.visit_while_expression(this);

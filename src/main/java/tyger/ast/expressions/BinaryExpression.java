@@ -45,6 +45,18 @@ public abstract class BinaryExpression extends Expression {
         this.operator = operator;
     }
 
+    public Expression left() {
+        return left;
+    }
+
+    public Expression right() {
+        return right;
+    }
+
+    public Operator op() {
+        return operator;
+    }
+
     @Override
     public String toString() {
         return Json.object(

@@ -20,7 +20,7 @@ import tyger.TygerParser.ModuleContext;
 import tyger.TygerParser.VariableDeclarationExpressionContext;
 import tyger.TygerParser.WhileExpressionContext;
 import tyger.ast.AstNode;
-import tyger.ast.visitor.ErrorReporter;
+import tyger.binder.ErrorReporter;
 
 public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
 
@@ -517,7 +517,7 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
                         "Expected argument %s of function %s (%s argument) to be of type %s but got %s",
                         expectedType.getKey(),
                         functionName,
-                        ordinal(i + 1),
+                        ErrorReporter.ordinal(i + 1),
                         expectedType.getValue(),
                         receivedType
                 );
@@ -527,16 +527,4 @@ public class TypeCheckVisitor extends TygerBaseVisitor<TypeCheckVisitor.Type> {
         return function.type;
     }
 
-    private static String ordinal(int i) {
-        String[] suffixes = new String[] { "th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th" };
-        switch (i % 100) {
-            case 11:
-            case 12:
-            case 13:
-                return i + "th";
-            default:
-                return i + suffixes[i % 10];
-
-        }
-    }
 }

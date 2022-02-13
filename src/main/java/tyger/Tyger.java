@@ -5,6 +5,8 @@ import org.antlr.v4.runtime.CommonTokenStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tyger.TygerParser.ModuleContext;
+import tyger.ast.AstNode;
+import tyger.binder.Binder;
 import tyger.codegen.JvmClassVisitor;
 
 import java.io.IOException;
@@ -23,7 +25,7 @@ public class Tyger {
             return;
         }
 
-        if (!Set.of("run", "tree", "type-check", "com", "compile", "ast").contains(args[0])) {
+        if (!Set.of("run", "tree", "type-check", "com", "compile", "ast", "bind").contains(args[0])) {
             logger.error("Invalid <action>: {}", args[0]);
             usage();
             return;
@@ -61,30 +63,35 @@ public class Tyger {
             final var tokens = new CommonTokenStream(lexer);
             final var parser = new TygerParser(tokens);
 
-            final ModuleContext module = parser.module();
+            final ModuleContext antlr4_module = parser.module();
 
             switch (action) {
                 case "run":
-                    module.accept(new TypeCheckVisitor(filepath, source));
-                    final Object result = module.accept(new InterpreterVisitor());
+                    antlr4_module.accept(new TypeCheckVisitor(filepath, source));
+                    final Object result = antlr4_module.accept(new InterpreterVisitor());
                     logger.info("Output:\n{}", result);
                     break;
                 case "tree":
-                    final StringBuilder xml = module.accept(new PrintTreeVisitor());
+                    final StringBuilder xml = antlr4_module.accept(new PrintTreeVisitor());
                     logger.info("\n{}", xml.toString());
                     break;
                 case "type-check":
-                    TypeCheckVisitor.Type type = module.accept(new TypeCheckVisitor(filepath, source));
+                    TypeCheckVisitor.Type type = antlr4_module.accept(new TypeCheckVisitor(filepath, source));
                     logger.info("Type: {}", type);
                     break;
                 case "com":
                 case "compile":
-                    module.accept(new TypeCheckVisitor(filepath, source));
-                    module.accept(new JvmClassVisitor(fileNameWithoutExtension));
+                    antlr4_module.accept(new TypeCheckVisitor(filepath, source));
+                    antlr4_module.accept(new JvmClassVisitor(fileNameWithoutExtension));
                     break;
                 case "ast":
-                    var ast = module.accept(new CreateAstVisitor());
+                    var ast = antlr4_module.accept(new CreateAstVisitor());
                     logger.info(ast.toString());
+                    break;
+                case "bind":
+                    AstNode tyger_ast = antlr4_module.accept(new CreateAstVisitor());
+                    final Binder binder = new Binder(fileName, source);
+                    tyger_ast.accept(binder);
                     break;
                 default:
                     throw new RuntimeException("Compiler action is not implemented: " + action);

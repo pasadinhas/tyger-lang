@@ -4,7 +4,7 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import tyger.ast.AstNode;
 import tyger.ast.Expression;
 import tyger.ast.FunctionDeclaration;
-import tyger.ast.FunctionDeclaration.Argument;
+import tyger.ast.FunctionDeclaration.Parameter;
 import tyger.ast.Module;
 import tyger.ast.expressions.Block;
 import tyger.ast.expressions.NameExpression;
@@ -46,13 +46,13 @@ public class CreateAstVisitor extends TygerBaseVisitor<AstNode> {
         final String name = ctx.identifier().getText();
         final Type return_type = Type.from_source_code(ctx.typeIdentifier().getText());
         final Expression body = (Expression) ctx.blockExpression().accept(this);
-        List<Argument> arguments = new ArrayList<>();
+        List<Parameter> parameters = new ArrayList<>();
         TygerParser.ArgsListContext argsList = ctx.argsList();
         while (argsList != null) {
-            arguments.add(new Argument(argsList.identifier().getText(), Type.from_source_code(argsList.typeIdentifier().getText())));
+            parameters.add(new Parameter(argsList.identifier().getText(), Type.from_source_code(argsList.typeIdentifier().getText())));
             argsList = argsList.argsList();
         }
-        return new FunctionDeclaration(locFromCtx(ctx), name, return_type, arguments, body);
+        return new FunctionDeclaration(locFromCtx(ctx), name, return_type, parameters, body);
     }
 
     @Override

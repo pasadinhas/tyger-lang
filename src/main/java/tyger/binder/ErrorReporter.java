@@ -1,4 +1,4 @@
-package tyger.ast.visitor;
+package tyger.binder;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,6 +80,14 @@ public class ErrorReporter {
         logger.error("{}", errorMessage);
 
         throw new RuntimeException(String.format(format, args));
+    }
+
+    public static String ordinal(int i) {
+        String[] suffixes = new String[] { "th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th" };
+        return switch (i % 100) {
+            case 11, 12, 13 -> i + "th";
+            default -> i + suffixes[i % 10];
+        };
     }
 
 }
