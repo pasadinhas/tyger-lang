@@ -6,9 +6,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tyger.TygerParser.ModuleContext;
 import tyger.ast.AstNode;
+import tyger.ast.Module;
 import tyger.binder.Binder;
+import tyger.codegen.ByteBuffer;
+import tyger.codegen.BytecodeGenerator;
 import tyger.codegen.JvmClassVisitor;
 
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,7 +31,7 @@ public class Tyger {
             return;
         }
 
-        if (!Set.of("run", "tree", "type-check", "com", "compile", "ast", "bind").contains(args[0])) {
+        if (!Set.of("run", "tree", "type-check", "com", "compile", "ast", "bind", "jvm").contains(args[0])) {
             logger.error("Invalid <action>: {}", args[0]);
             usage();
             return;
@@ -93,9 +99,23 @@ public class Tyger {
                     final Binder binder = new Binder(fileName, source);
                     tyger_ast.accept(binder);
                     break;
+                case "jvm":
+                    AstNode tyger_ast_2 = antlr4_module.accept(new CreateAstVisitor());
+                    final Binder binder_2 = new Binder(fileName, source);
+                    tyger_ast_2.accept(binder_2);
+                    final ByteBuffer bytes = tyger_ast_2.accept(new BytecodeGenerator());
+                    final File file = new File(((Module) tyger_ast_2).name() + ".class");
+                    try (FileOutputStream fos = new FileOutputStream(file);
+                         BufferedOutputStream os = new BufferedOutputStream(fos)
+                    ) {
+                        os.write(bytes.to_byte_array());
+                    }
+                    break;
                 default:
                     throw new RuntimeException("Compiler action is not implemented: " + action);
             }
+        } catch (final CompilerException e) {
+            logger.error("Compilation unsuccessful: {}", e.getMessage());
         } catch (final Exception e) {
             StackTraceElement[] stackTrace = e.getStackTrace();
             StringBuilder at = new StringBuilder();
@@ -110,7 +130,6 @@ public class Tyger {
                         .append(':')
                         .append(stackTrace[i].getLineNumber())
                         .append(')');
-                    break;
                 }
             }
             logger.error("Compilation unsuccessful: {}: {}{}", e.getClass().getName(), e.getMessage(), at);

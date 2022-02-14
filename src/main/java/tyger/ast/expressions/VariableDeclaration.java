@@ -18,6 +18,18 @@ public class VariableDeclaration extends Expression {
         this.expression = expression;
     }
 
+    public String name() {
+        return name;
+    }
+
+    public Type declared_type() {
+        return declared_type;
+    }
+
+    public Expression expression() {
+        return expression;
+    }
+
     @Override
     public <T> T accept(final AstVisitor<T> visitor) {
         return visitor.visit_variable_declaration(this);

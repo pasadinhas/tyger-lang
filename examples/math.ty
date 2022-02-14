@@ -1,4 +1,4 @@
-module asd.gaf.d
+module math
 
 func int main() {
     factorial(10) + fib(10)

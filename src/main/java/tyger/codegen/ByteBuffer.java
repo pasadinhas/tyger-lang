@@ -45,6 +45,16 @@ public class ByteBuffer {
         write_2(ops);
     }
 
+    public void write_4(final int bytes) {
+        assert bytes <= 0xFFFFFFFF; // 4 bytes
+        write_1((byte) (bytes >>> 24));
+        write_1((byte) (bytes >>> 16));
+        write_1((byte) (bytes >>>  8));
+        write_1((byte) (bytes >>>  0));
+    }
+
+
+
     public void write_all(final byte[] bytes) {
         for (int i = 0; i < bytes.length; i++) {
             this.write_1(bytes[i]);

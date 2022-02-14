@@ -2,6 +2,7 @@ package tyger.binder;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tyger.CompilerException;
 import tyger.ast.AstNode;
 
 public class ErrorReporter {
@@ -79,7 +80,7 @@ public class ErrorReporter {
 
         logger.error("{}", errorMessage);
 
-        throw new RuntimeException(String.format(format, args));
+        throw new CompilerException(String.format(format, args));
     }
 
     public static String ordinal(int i) {

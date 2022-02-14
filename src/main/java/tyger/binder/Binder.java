@@ -1,5 +1,6 @@
 package tyger.binder;
 
+import tyger.TypeCheckVisitor;
 import tyger.ast.AstNode;
 import tyger.ast.Expression;
 import tyger.ast.FunctionDeclaration;
@@ -192,12 +193,38 @@ public class Binder implements AstVisitor<AstNode> {
 
     @Override
     public AstNode visit_identifier_access_expression(final NameExpression identifier_access_expression) {
-        return null;
+        final String name = identifier_access_expression.name();
+
+        final Optional<Type> optional_variable_type = scope.get_variable(name);
+        if (optional_variable_type.isEmpty()) {
+            return compiler_error(identifier_access_expression.loc, "Undefined variable: %s", name);
+        }
+
+        return identifier_access_expression.bind(optional_variable_type.get());
     }
 
     @Override
     public AstNode visit_assignment(final Assignment assignment) {
-        return null;
+        if (!(assignment.left() instanceof NameExpression)) {
+            compiler_error(assignment.left().loc, "Left-side of an assignment must be a variable");
+        }
+
+        final NameExpression variable = (NameExpression) assignment.left();
+        final String variable_name = variable.name();
+
+        final Optional<Type> optional_variable = scope.get_variable(variable_name);
+        if (optional_variable.isEmpty()) {
+            compiler_error(assignment.loc, "Cannot assign to undeclared variable '%s'", variable_name);
+        }
+
+        final Type declared_type = optional_variable.get();
+        final Type expression_type = assignment.right().accept(this).type();
+
+        if (!declared_type.is_assignable_from(expression_type)) {
+            return compiler_error(assignment.loc, "Cannot assign value of type %s to variable '%s' of type %s", expression_type, variable_name, declared_type);
+        }
+
+        return assignment.bind(declared_type);
     }
 
     record BinaryOperation(Type left, Type right) {}
@@ -343,6 +370,21 @@ public class Binder implements AstVisitor<AstNode> {
 
     @Override
     public AstNode visit_variable_declaration(final VariableDeclaration variable_declaration) {
-        return null;
+        final String name = variable_declaration.name();
+        final Optional<Type> optional_variable = scope.get_variable_in_current_scope(name);
+        if (optional_variable.isPresent()) {
+            compiler_error(variable_declaration.loc, "Variable '%s' has already been declared in this scope.", name);
+        }
+
+        final Type declared_type = variable_declaration.declared_type();
+        final Type expression_type = variable_declaration.expression().accept(this).type();
+
+        if (!declared_type.is_assignable_from(expression_type)) {
+            compiler_error(variable_declaration.loc, "Cannot assign value of type %s to variable '%s' of type %s.", expression_type, name, declared_type);
+        }
+
+        scope.declare_variable(name, declared_type);
+
+        return variable_declaration.bind(declared_type);
     }
 }

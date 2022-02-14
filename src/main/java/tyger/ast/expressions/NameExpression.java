@@ -13,6 +13,10 @@ public class NameExpression extends Expression {
         this.name = name;
     }
 
+    public String name() {
+        return name;
+    }
+
     @Override
     public <T> T accept(final AstVisitor<T> visitor) {
         return visitor.visit_identifier_access_expression(this);

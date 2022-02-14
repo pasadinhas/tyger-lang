@@ -28,6 +28,10 @@ public class Module extends AstNode {
         return function_declarations;
     }
 
+    public String name() {
+        return name;
+    }
+
     @Override
     public String toString() {
         return Json.object(

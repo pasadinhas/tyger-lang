@@ -230,6 +230,10 @@ public class ConstantPool {
                 .orElseThrow();
     }
 
+    public int index_of_utf8(String value) {
+        return index_of(new Utf8(value));
+    }
+
     public int size() {
         return constant_pool_size;
     }

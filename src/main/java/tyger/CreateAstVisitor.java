@@ -7,6 +7,7 @@ import tyger.ast.FunctionDeclaration;
 import tyger.ast.FunctionDeclaration.Parameter;
 import tyger.ast.Module;
 import tyger.ast.expressions.Block;
+import tyger.ast.expressions.FunctionCall;
 import tyger.ast.expressions.NameExpression;
 import tyger.ast.expressions.VariableDeclaration;
 import tyger.ast.expressions.binary.*;
@@ -131,5 +132,17 @@ public class CreateAstVisitor extends TygerBaseVisitor<AstNode> {
         final Expression left = (Expression) ctx.identifier().accept(this);
         final Expression right = (Expression) ctx.expression().accept(this);
         return new Assignment(locFromCtx(ctx), left, right);
+    }
+
+    @Override
+    public AstNode visitFunctionCallExpression(final TygerParser.FunctionCallExpressionContext ctx) {
+        final String function_name = ctx.identifier().getText();
+        final List<Expression> parameters = new ArrayList<>();
+        TygerParser.ExpressionListContext expressionList = ctx.expressionList();
+        while (expressionList != null) {
+            parameters.add((Expression) expressionList.expression().accept(this));
+            expressionList = expressionList.expressionList();
+        }
+        return new FunctionCall(locFromCtx(ctx), function_name, parameters);
     }
 }
