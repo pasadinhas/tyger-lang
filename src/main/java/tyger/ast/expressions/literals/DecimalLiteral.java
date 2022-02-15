@@ -12,6 +12,10 @@ public class DecimalLiteral extends Expression {
         this.value = value;
     }
 
+    public long value() {
+        return value;
+    }
+
     @Override
     public <T> T accept(final AstVisitor<T> visitor) {
         return visitor.visit_decimal_literal(this);

@@ -6,9 +6,10 @@ import java.util.*;
 
 public class Bindings {
 
-    record FunctionSignature(String name, String signature, Type type) {}
+    record Function(String name, String signature, Type type) {}
     record LocalVariable(String name, Integer stack_position, Type type) {}
-    private record Scope(Map<String, FunctionSignature> functions, Map<String, LocalVariable> variables) {
+
+    private record Scope(Map<String, Function> functions, Map<String, LocalVariable> variables) {
         Scope() {
             this(new HashMap<>(), new HashMap<>());
         }
@@ -23,16 +24,20 @@ public class Bindings {
     }
 
     public void pop_scope() {
-        assert !scopes.isEmpty();
+        assert scopes.peek() != null;
+
+        local_variables_size -= scopes.peek().variables.size();
+        assert local_variables_size >= 0;
+
         scopes.pop();
     }
 
     public void add_function(String name, String signature, Type type) {
         assert !scopes.isEmpty();
-        scopes.peek().functions.put(name, new FunctionSignature(name, signature, type));
+        scopes.peek().functions.put(name, new Function(name, signature, type));
     }
 
-    public FunctionSignature find_function(String name) {
+    public Function find_function(String name) {
         assert scopes.peek() != null;
         for (final Scope scope : scopes) {
             if (scope.functions.containsKey(name)) {
@@ -42,9 +47,9 @@ public class Bindings {
         throw new RuntimeException("Function not found: " + name);
     }
 
-    public void add_local_variable(String name, String signature, Type type) {
+    public void add_local_variable(String name, Type type) {
         assert !scopes.isEmpty();
-        scopes.peek().functions.put(name, new FunctionSignature(name, signature, type));
+        scopes.peek().variables.put(name, new LocalVariable(name, local_variables_size++, type));
     }
 
     public LocalVariable find_local_variable(String name) {

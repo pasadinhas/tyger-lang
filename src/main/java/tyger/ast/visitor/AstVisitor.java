@@ -16,8 +16,8 @@ public interface AstVisitor<T> {
     T visit_function_call(FunctionCall function_call);
     T visit_while_expression(WhileExpression while_expression);
     T visit_assignment(Assignment assignment);
-    T visit_multiplication_expression(Multiplication multiplication);
     T visit_identifier_access_expression(NameExpression identifier_access_expression);
+    T visit_multiplication(Multiplication multiplication);
     T visit_division(Division division);
     T visit_modulo(Modulo modulo);
     T visit_addition(Addition addition);

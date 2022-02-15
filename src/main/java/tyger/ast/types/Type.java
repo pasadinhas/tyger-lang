@@ -1,10 +1,26 @@
 package tyger.ast.types;
 
-public abstract class Type {
+public sealed abstract class Type permits Type.Integer, Type.Boolean, Type.Any, Type.Optional {
 
+    public static final class Any extends Type {}
+    public static final class Integer extends Type {}
+    public static final class Boolean extends Type {}
+    public static final class Optional extends Type {
+        private final Type type;
+
+        public Optional(final Type type) {
+            this.type = type;
+        }
+
+        public Type type() {
+            return type;
+        }
+    }
+
+    public static final Type Any = new Any();
     public static final Type Integer = new Integer();
     public static final Type Boolean = new Boolean();
-    public static final Type OptionalAny = Optional(new Type() {});
+    public static final Type OptionalAny = Optional(Any);
     public static final Optional Optional(Type of) {
         return new Optional(of);
     }

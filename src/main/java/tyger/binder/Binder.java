@@ -279,7 +279,7 @@ public class Binder implements AstVisitor<AstNode> {
     }
 
     @Override
-    public AstNode visit_multiplication_expression(final Multiplication multiplication) {
+    public AstNode visit_multiplication(final Multiplication multiplication) {
         return visit_arithmetic_binary_expression(multiplication);
     }
 

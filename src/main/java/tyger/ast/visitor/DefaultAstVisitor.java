@@ -56,7 +56,7 @@ public class DefaultAstVisitor<T> implements AstVisitor<T> {
         return default_handling(assignment);
     }
 
-    public T visit_multiplication_expression(Multiplication multiplication) {
+    public T visit_multiplication(Multiplication multiplication) {
         return default_handling(multiplication);
     }
 

@@ -12,6 +12,6 @@ public class Multiplication extends BinaryExpression {
 
     @Override
     public <T> T accept(final AstVisitor<T> visitor) {
-        return visitor.visit_multiplication_expression(this);
+        return visitor.visit_multiplication(this);
     }
 }
