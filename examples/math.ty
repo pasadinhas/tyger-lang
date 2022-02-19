@@ -23,3 +23,8 @@ func int fib(int n) {
         }
     }
 }
+
+func int double(int n) {
+    int multiplier = 2
+    n * multiplier
+}

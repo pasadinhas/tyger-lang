@@ -1,6 +1,7 @@
 package tyger.codegen;
 
-import tyger.TygerParser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tyger.ast.Expression;
 import tyger.ast.FunctionDeclaration;
 import tyger.ast.Module;
@@ -12,9 +13,11 @@ import tyger.ast.types.Type;
 import tyger.ast.visitor.AstVisitor;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class BytecodeGenerator implements AstVisitor<ByteBuffer> {
 
+    private static final Logger logger = LoggerFactory.getLogger(BytecodeGenerator.class);
     private final ConstantPool constant_pool = new ConstantPool();
     private final Map<FunctionDeclaration, CodeGen> functions = new HashMap<>();
     private final Bindings bindings = new Bindings();
@@ -63,8 +66,6 @@ public class BytecodeGenerator implements AstVisitor<ByteBuffer> {
             final FunctionDeclaration function_declaration = entry.getKey();
             final CodeGen function_code_gen = entry.getValue();
             final byte[] function_bytecode = function_code_gen.to_byte_array();
-
-            System.out.println(function_declaration.name());
 
             final int function_name_reference = constant_pool.index_of_utf8(function_declaration.name());
             final int function_signature_reference = constant_pool.index_of_utf8(function_signature(function_declaration));
@@ -120,6 +121,19 @@ public class BytecodeGenerator implements AstVisitor<ByteBuffer> {
     @Override
     public ByteBuffer visit_function_declaration(final FunctionDeclaration function_declaration) {
         return scoped(() -> {
+            // Log
+            logger.debug("=".repeat(80));
+            logger.debug(
+                    "== func {} {}({})",
+                    function_declaration.type(),
+                    function_declaration.name(),
+                    function_declaration.parameters()
+                            .stream()
+                            .map(parameter -> String.format("%s %s", parameter.type(), parameter.name()))
+                            .collect(Collectors.joining(", "))
+            );
+            logger.debug("=".repeat(80));
+
             // Register a new active code gen
             this.codegen = new CodeGen();
             functions.put(function_declaration, codegen);
@@ -163,8 +177,16 @@ public class BytecodeGenerator implements AstVisitor<ByteBuffer> {
         return class_file;
     }
 
-    private void not_implemented_yet() {
-        throw new RuntimeException("ERROR: " + get_caller() + " is not implemented yet.");
+    private <T> T not_implemented_yet() {
+        return not_implemented_yet(get_caller(), "");
+    }
+
+    private <T> T not_implemented_yet(final String caller, final String with) {
+        throw new RuntimeException("ERROR: " + caller + ((with == null) ? "" : " with " + with) + " is not implemented yet.");
+    }
+
+    private <T> T not_implemented_yet(final String with) {
+        return not_implemented_yet(get_caller(), with);
     }
 
     private String get_caller() {
@@ -234,7 +256,25 @@ public class BytecodeGenerator implements AstVisitor<ByteBuffer> {
 
     @Override
     public ByteBuffer visit_assignment(final Assignment assignment) {
-        not_implemented_yet();
+        assignment.right().accept(this);
+
+        if (assignment.left() instanceof NameExpression name_expression) {
+            final String name = name_expression.name();
+            final Bindings.LocalVariable local_variable = bindings.find_local_variable(name);
+
+            var unused = switch (assignment.type()) {
+                case Type.Integer i -> switch (local_variable.stack_position()) {
+                    case 0 -> codegen.istore_0();
+                    case 1 -> codegen.istore_1();
+                    case 2 -> codegen.istore_2();
+                    case 3 -> codegen.istore_3();
+                    default -> codegen.istore(local_variable.stack_position());
+                };
+                default -> not_implemented_yet("type " + assignment.type());
+            };
+        } else {
+            not_implemented_yet("left expression " + assignment.left().getClass().getSimpleName());
+        }
         return class_file;
     }
 
@@ -252,61 +292,47 @@ public class BytecodeGenerator implements AstVisitor<ByteBuffer> {
                 case 3 -> codegen.iload_3();
                 default -> codegen.iload(local_variable.stack_position());
             };
-            default -> throw new RuntimeException("visit_identifier_access_expression with type " + type + " is not implemented yet");
+            default -> not_implemented_yet("type " + type);
         };
+
+        return class_file;
+    }
+
+    private ByteBuffer handle_arithmetic_binary_expression(final BinaryExpression binary_expression, final Runnable int_handler) {
+        binary_expression.left().accept(this);
+        binary_expression.right().accept(this);
+
+        switch (binary_expression.type()) {
+            case Type.Integer i -> int_handler.run();
+            default -> throw new RuntimeException("ERROR: " + get_caller() + " with type " + binary_expression.type() + " is not implemented yet.");
+        }
 
         return class_file;
     }
 
     @Override
     public ByteBuffer visit_multiplication(final Multiplication multiplication) {
-        multiplication.left().accept(this);
-        multiplication.right().accept(this);
-
-        switch (multiplication.type()) {
-            case Type.Integer i -> codegen.imul();
-            default -> throw new RuntimeException("ERROR: visit_multiplication with type " + multiplication.type() + " is not implemented yet.");
-        }
-
-        return class_file;
+        return handle_arithmetic_binary_expression(multiplication, codegen::imul);
     }
 
     @Override
     public ByteBuffer visit_division(final Division division) {
-        not_implemented_yet();
-        return class_file;
+        return handle_arithmetic_binary_expression(division, codegen::idiv);
     }
 
     @Override
     public ByteBuffer visit_modulo(final Modulo modulo) {
-        not_implemented_yet();
-        return class_file;
+        return handle_arithmetic_binary_expression(modulo, codegen::irem);
     }
 
     @Override
     public ByteBuffer visit_addition(final Addition addition) {
-        addition.left().accept(this);
-        addition.right().accept(this);
-
-        switch (addition.type()) {
-            case Type.Integer i -> codegen.iadd();
-            default -> throw new RuntimeException("ERROR: visit_addition with type " + addition.type() + " is not implemented yet.");
-        }
-
-        return class_file;
+        return handle_arithmetic_binary_expression(addition, codegen::iadd);
     }
 
     @Override
     public ByteBuffer visit_subtraction(final Subtraction subtraction) {
-        subtraction.left().accept(this);
-        subtraction.right().accept(this);
-
-        switch (subtraction.type()) {
-            case Type.Integer i -> codegen.isub();
-            default -> throw new RuntimeException("ERROR: visit_subtraction with type " + subtraction.type() + " is not implemented yet.");
-        }
-
-        return class_file;
+        return handle_arithmetic_binary_expression(subtraction, codegen::isub);
     }
 
     @Override
@@ -389,7 +415,13 @@ public class BytecodeGenerator implements AstVisitor<ByteBuffer> {
 
     @Override
     public ByteBuffer visit_variable_declaration(final VariableDeclaration variable_declaration) {
-        not_implemented_yet();
-        return class_file;
+        bindings.add_local_variable(variable_declaration.name(), variable_declaration.type());
+        final Assignment assignment = new Assignment(
+                variable_declaration.loc,
+                new NameExpression(variable_declaration.loc, variable_declaration.name()),
+                variable_declaration.expression()
+        );
+        assignment.bind(variable_declaration.type());
+        return visit_assignment(assignment);
     }
 }

@@ -125,6 +125,32 @@ public class CodeGen {
         return instruction_0(Instruction.iload_3);
     }
 
+    public R1 istore(int index) {
+        assert index > 3;
+        operand_stack.shrink();
+        return instruction_1(Instruction.istore, index);
+    }
+
+    public R0 istore_0() {
+        operand_stack.shrink();
+        return instruction_0(Instruction.istore_0);
+    }
+
+    public R0 istore_1() {
+        operand_stack.shrink();
+        return instruction_0(Instruction.istore_1);
+    }
+
+    public R0 istore_2() {
+        operand_stack.shrink();
+        return instruction_0(Instruction.istore_2);
+    }
+
+    public R0 istore_3() {
+        operand_stack.shrink();
+        return instruction_0(Instruction.istore_3);
+    }
+
     public R1 if_icmpne() {
         return if_icmpne(0x0000);
     }
