@@ -76,7 +76,7 @@ public class BytecodeGenerator implements AstVisitor<ByteBuffer> {
             class_file.write_2(function_signature_reference); // method signature
             class_file.write_2(0x0001); // Number of method attributes: 1 (Code attribute)
             class_file.write_2(code_reference); // "Code"
-            class_file.write_2(                 // Size of "Code" attribute:
+            class_file.write_4(                 // Size of "Code" attribute:
                     2 +                         // - 2 bytes for max stack size
                     2 +                         // - 2 bytes for max local variables
                     4 +                         // - 4 bytes for size of code
@@ -173,7 +173,30 @@ public class BytecodeGenerator implements AstVisitor<ByteBuffer> {
 
     @Override
     public ByteBuffer visit_if_expression(final IfExpression if_expression) {
-        not_implemented_yet();
+        // stack: Ø
+        if_expression.condition().accept(this); // stack: condition_result
+
+        codegen.iconst_1(); // stack: condition_result | 1
+        CodeGen.R1 if_icmpne = codegen.if_icmpne(); // stack: Ø
+
+        int stack_size_before_then_block = codegen.operand_stack.size;
+        if_expression.then().accept(this);
+
+        final CodeGen.R1 _goto = codegen._goto(); // goto to skip else block.
+        codegen.set_jump_offset(if_icmpne);       // set if_icmpne jump location
+
+        assert codegen.operand_stack.size == stack_size_before_then_block + 1;
+        codegen.operand_stack.shrink(); // then-branch and else-branch are mutually exclusive. shrink the operand stack to virtually "drop" the then-branch result
+
+        if (if_expression._else() != null) {
+            if_expression._else().accept(this);
+        } else {
+            // TODO: replace with whatever becomes Optional(Any)
+            codegen.aconst_null(); // make sure the else-branch provides a value, because it will be dropped if it's not the last expression of a block.
+        }
+
+        codegen.set_jump_offset(_goto);
+
         return class_file;
     }
 

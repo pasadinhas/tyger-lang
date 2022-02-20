@@ -1,4 +1,4 @@
-package tyger;
+package tyger.decompiler;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +61,24 @@ public class ClassDecompiler {
                 continue;
             }
 
+            if (tag == 0x0A) {
+                print_1(tag, "tag = Methodref");
+                print_2(read_2(), "class_index");
+                print_2(read_2(), "name_and_type_index");
+                println();
+                continue;
+            }
+
+            if (tag == 0x0C) {
+                print_1(tag, "tag = NameAndType");
+                print_2(read_2(), "name_index");
+                print_2(read_2(), "descriptor_index");
+                println();
+                continue;
+            }
+
+
+
             throw new RuntimeException(String.format("Oops... Did not expect tag %02X", tag));
         }
 
@@ -69,8 +87,76 @@ public class ClassDecompiler {
         print_2(read_2(), "super_class");
         print_2(expect_2(0x0000), "interfaces_count"); // expected to be zero
         print_2(expect_2(0x0000), "fields_count"); // expected to be zero
-        print_2(expect_2(0x0000), "methods_count"); // expected to be zero
+
+        println();
+        final int methods_count = read_2();
+        print_2(methods_count, "methods_count"); // expected to be zero
+        println();
+
+        for (int i = 0; i < methods_count; i++) {
+            print_2(expect_2(0x0009), "access_flags"); // public static
+            print_2(read_2(), "name_index");
+            print_2(read_2(), "descriptor_index");
+            print_2(expect_2(0x0001), "attributes_count"); // only Code attribute, for now
+            final int method_attributes_count = 1;
+            for (int j = 0; j < method_attributes_count; j++) {
+                print_2(read_2(), "attribute_name_index");
+                final int method_attribute_length = read_4();
+                print_4(method_attribute_length, "attribute_length");
+
+                // TODO: this is assuming the attribute is "Code"
+                print_2(read_2(), "max_stack");
+                print_2(read_2(), "max_locals");
+                final int code_length = read_4();
+                print_4(code_length, "code_length");
+                read_code(code_length);
+                print_2(expect_2(0x0000), "exception_table_length"); // exception table length is not expected
+                print_2(expect_2(0x0000), "attributes_count"); // method code is not expected to have attributes
+            }
+            println();
+        }
+
+        println();
         print_2(expect_2(0x0000), "attributes_count"); // expected to be zero
+    }
+
+    private void read_code(final int code_length) {
+        final int target = current + code_length;
+        while (current < target) {
+            final int opcode = read_1();
+            final Instructions.Instruction instruction = Instructions.get(opcode);
+            if (instruction == null) {
+                throw new RuntimeException(String.format("Unknown opcode: %04X", opcode));
+            }
+            read_instruction(instruction);
+        }
+    }
+
+    private void read_instruction(final Instructions.Instruction instruction) {
+        final StringBuilder builder = new StringBuilder();
+        builder.append(instruction.name());
+        for (final int argument_size : instruction.arguments()) {
+            builder.append(' ');
+            var unused = switch (argument_size) {
+                case 1 -> builder.append(format_1(read_1()));
+                case 2 -> builder.append(format_2(read_2()));
+                case 4 -> builder.append(format_4(read_4()));
+                default -> throw new RuntimeException(instruction.name() + ": Unexpected argument size: " + argument_size);
+            };
+        }
+        print(builder.toString());
+    }
+
+    private String format_1(final int bytes) {
+        return String.format("%02X", bytes);
+    }
+
+    private String format_2(final int bytes) {
+        return String.format("%04X", bytes);
+    }
+
+    private String format_4(final int bytes) {
+        return String.format("%08X", bytes);
     }
 
     private String read_utf8(final int length) {
