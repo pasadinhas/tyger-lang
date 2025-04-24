@@ -1,9 +1,9 @@
 import fs from "fs";
 import url from "url";
 import path from "path";
-import { lex } from "../../src/lexer/lexer.ts";
-import { token } from "../../src/lexer/tokens.ts";
-import type { TokenType } from "../../src/lexer/tokens.ts";
+import { lex } from "../src/lexer/lexer.ts";
+import { token } from "../src/lexer/tokens.ts";
+import type { TokenType } from "../src/lexer/tokens.ts";
 
 import { expect, test } from "vitest";
 
