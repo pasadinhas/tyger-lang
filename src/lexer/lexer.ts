@@ -1,7 +1,7 @@
 import { assert } from "../assert.ts";
 import { Source } from "./source.ts";
-import { token, TokenKinds } from "./tokens.ts";
-import type { Token, TokenKind} from "./tokens.ts"
+import { token } from "./tokens.ts";
+import type { Token, TokenType } from "./tokens.ts";
 
 type Matcher = (src: Source) => Token | false;
 
@@ -18,17 +18,17 @@ function isIdentifierChar(char: string): boolean {
   );
 }
 
-function keywordMatcher(keyword: string, kind: TokenKind): Matcher {
+function keywordMatcher(type: TokenType, keyword: string = type): Matcher {
   return (src) =>
     src.match(keyword) &&
     !isIdentifierChar(src.peek(keyword.length)) &&
     src.advance(keyword.length) &&
-    token(kind, keyword);
+    token(type, undefined);
 }
 
-function exactMatcher(value: string, kind: TokenKind): Matcher {
+function exactMatcher(type: TokenType, value: string = type): Matcher {
   return (src) =>
-    src.match(value) && src.advance(value.length) && token(kind, value);
+    src.match(value) && src.advance(value.length) && token(type, undefined);
 }
 
 function isDigit(char: string) {
@@ -51,26 +51,26 @@ function matchWhile(
 
 function numberMatcher(src: Source): Token | false {
   const offset = matchWhile(src, isDigit);
-  return offset > 0 && token(TokenKinds.Number, src.take(offset));
+  return offset > 0 && token("Number", src.take(offset));
 }
 
 function identifierMatcher(src: Source): Token | false {
   const offset = matchWhile(src, isIdentifierChar);
-  return offset > 0 && token(TokenKinds.Identifier, src.take(offset));
+  return offset > 0 && token("Identifier", src.take(offset));
 }
 
-const Matchers: Record<TokenKind, Matcher> = {
-  [TokenKinds.Let]: keywordMatcher("let", TokenKinds.Let),
-  [TokenKinds.Equal]: exactMatcher("=", TokenKinds.Equal),
-  [TokenKinds.Plus]: exactMatcher("+", TokenKinds.Plus),
-  [TokenKinds.Minus]: exactMatcher("-", TokenKinds.Minus),
-  [TokenKinds.Star]: exactMatcher("*", TokenKinds.Star),
-  [TokenKinds.Slash]: exactMatcher("/", TokenKinds.Slash),
-  [TokenKinds.LParen]: exactMatcher("(", TokenKinds.LParen),
-  [TokenKinds.RParen]: exactMatcher(")", TokenKinds.RParen),
-  [TokenKinds.Semicolon]: exactMatcher(";", TokenKinds.Semicolon),
-  [TokenKinds.Number]: numberMatcher,
-  [TokenKinds.Identifier]: identifierMatcher,
+const Matchers: Record<TokenType, Matcher> = {
+  "let": keywordMatcher("let"),
+  "=": exactMatcher("="),
+  "+": exactMatcher("+"),
+  "-": exactMatcher("-"),
+  "*": exactMatcher("*"),
+  "/": exactMatcher("/"),
+  "(": exactMatcher("("),
+  ")": exactMatcher(")"),
+  ";": exactMatcher(";"),
+  "Number": numberMatcher,
+  "Identifier": identifierMatcher,
 };
 
 function isWhiteSpace(char: string): boolean {
