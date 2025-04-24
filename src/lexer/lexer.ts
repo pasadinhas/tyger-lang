@@ -66,6 +66,7 @@ const Matchers: Record<TokenType, Matcher> = {
   "-": exactMatcher("-"),
   "*": exactMatcher("*"),
   "/": exactMatcher("/"),
+  "%": exactMatcher("%"),
   "(": exactMatcher("("),
   ")": exactMatcher(")"),
   ";": exactMatcher(";"),

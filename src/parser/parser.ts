@@ -72,7 +72,7 @@ function parseAdditiveExpression(parser: Parser): Expression {
 function parseMultiplicativeExpression(parser: Parser): Expression {
   let left = parsePrimaryExpression(parser);
 
-  while (["/", "*"].includes(peek(parser).type)) {
+  while (["/", "*", "%"].includes(peek(parser).type)) {
     const operator = eat(parser).type;
     const right = parsePrimaryExpression(parser);
     left = {
