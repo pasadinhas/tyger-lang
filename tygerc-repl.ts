@@ -2,9 +2,14 @@
 
 import readline from "readline";
 import { lex } from "./src/lexer/lexer.ts";
+import { parse } from "./src/parser/parser.ts";
+import util from "util";
+
+// change default depth of objects in console.log
+util.inspect.defaultOptions.depth = 10;
 
 type Mode = "lexer" | "parser";
-let mode: Mode = "lexer";
+let mode: Mode = "parser";
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -33,7 +38,7 @@ rl.on("line", (line) => {
       if (mode === "lexer") {
         result = lex(line);
       } else if (mode === "parser") {
-        result = "TODO: parser not implemented";
+        result = parse(lex(line));
       }
       console.log(result);
     } catch (err) {

@@ -71,6 +71,7 @@ const Matchers: Record<TokenType, Matcher> = {
   ";": exactMatcher(";"),
   "Number": numberMatcher,
   "Identifier": identifierMatcher,
+  "EOF": () => false, // This token is automatically emitted at the end of input.
 };
 
 function isWhiteSpace(char: string): boolean {
@@ -104,5 +105,8 @@ export function lex(source: string): Token[] {
       );
     }
   }
+
+  tokens.push(token("EOF"));
+
   return tokens;
 }

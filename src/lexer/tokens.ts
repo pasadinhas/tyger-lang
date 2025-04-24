@@ -9,7 +9,8 @@ export type TokenType =
   | ")"
   | ";"
   | "Identifier"
-  | "Number";
+  | "Number"
+  | "EOF";
 
 export interface Token {
   type: TokenType;

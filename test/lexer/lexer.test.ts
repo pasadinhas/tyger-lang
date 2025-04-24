@@ -15,17 +15,18 @@ function readTestResourceFile(file: string) {
 }
 
 const SingleTokenTests: Record<TokenType, [source: string, value?: string]> = {
-  let: ["let", undefined],
   "=": ["=", undefined],
-  Identifier: ["abc", "abc"],
   "(": ["(", undefined],
   ")": [")", undefined],
   "-": ["-", undefined],
-  Number: ["42", "42"],
   ";": [";", undefined],
   "*": ["*", undefined],
   "+": ["+", undefined],
   "/": ["/", undefined],
+  let: ["let", undefined],
+  Identifier: ["abc", "abc"],
+  Number: ["42", "42"],
+  EOF: ["", undefined],
 };
 
 for (const key of Object.keys(SingleTokenTests)) {
@@ -33,7 +34,11 @@ for (const key of Object.keys(SingleTokenTests)) {
   const [source, value] = SingleTokenTests[type];
 
   test(`single token lex: ${type}`, () => {
-    expect(lex(source)).toStrictEqual([token(type, value)]);
+    const expectedTokens = [token(type, value)];
+    if (type !== "EOF") {
+      expectedTokens.push(token("EOF"));
+    }
+    expect(lex(source)).toStrictEqual(expectedTokens);
   });
 }
 
@@ -61,5 +66,6 @@ test(`resource file ${testFile}`, () => {
     token("-"),
     token("Number", "1"),
     token(";"),
+    token("EOF"),
   ]);
 });
