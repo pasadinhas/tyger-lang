@@ -3,13 +3,20 @@
 import readline from "readline";
 import { lex } from "./src/lexer/lexer.ts";
 import { parse } from "./src/parser/parser.ts";
+import { evaluate } from "./src/interpreter/interpreter.ts";
 import util from "util";
 
 // change default depth of objects in console.log
 util.inspect.defaultOptions.depth = 10;
 
-type Mode = "lexer" | "parser";
-let mode: Mode = "parser";
+type Mode = "lexer" | "parser" | "interpreter";
+let mode: Mode = "interpreter";
+
+const handlers: Record<Mode, (string) => any> = {
+  lexer: (line) => lex(line),
+  parser: (line) => parse(lex(line)),
+  interpreter: (line) => evaluate(parse(lex(line))),
+};
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -34,13 +41,7 @@ rl.on("line", (line) => {
     }
   } else {
     try {
-      let result;
-      if (mode === "lexer") {
-        result = lex(line);
-      } else if (mode === "parser") {
-        result = parse(lex(line));
-      }
-      console.log(result);
+      console.log(handlers[mode](line));
     } catch (err) {
       console.error("Error:", err);
     }
