@@ -9,14 +9,17 @@ import util from "util";
 // change default depth of objects in console.log
 util.inspect.defaultOptions.depth = 10;
 
-type Mode = "lexer" | "parser" | "interpreter";
+type Mode = "lexer" | "parser" | "interpreter" | "eval";
 let mode: Mode = "interpreter";
 
 const handlers: Record<Mode, (string) => any> = {
   lexer: (line) => lex(line),
   parser: (line) => parse(lex(line)),
   interpreter: (line) => evaluate(parse(lex(line))),
+  eval: (line) => evaluate(parse(lex(line))),
 };
+
+const availableModes = Object.keys(handlers);
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -25,7 +28,7 @@ const rl = readline.createInterface({
 });
 
 console.log("Tyger REPL v.0.0.1");
-console.log("Use :mode [lexer|parser] to switch.");
+console.log(`Use :mode [${availableModes.join("|")}] to switch.`);
 
 rl.prompt();
 rl.on("line", (line) => {
@@ -33,11 +36,11 @@ rl.on("line", (line) => {
 
   if (trimmed.startsWith(":mode")) {
     const [, newMode] = trimmed.split(" ");
-    if (newMode === "lexer" || newMode === "parser") {
-      mode = newMode;
+    if (availableModes.includes(newMode)) {
+      mode = newMode as Mode;
       console.log(`Mode switched to: ${mode}`);
     } else {
-      console.log("Unknown mode. Available modes: lexer, parser");
+      console.log(`Unknown mode. Available modes: ${availableModes.join(", ")}`);
     }
   } else {
     try {
