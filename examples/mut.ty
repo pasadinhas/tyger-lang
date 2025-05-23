@@ -1,0 +1,31 @@
+fn square(n: int) {
+  return n * n;
+}
+
+struct Point {
+  x: f32 = 0;
+  y: f32 = 0;
+}
+
+fn normalize(mut p: Point) {
+  let length = Math.sqrt(p.x * p.x + p.y * p.y);
+  p.x /= length;
+  p.y /= length;
+}
+
+fn projectX(p: Point) { // void return type implicit
+  p.y = 0; // Compile error: cannot write to non-mutable reference p.
+}
+
+fn projectY(p: Point) { // Point return type implicit
+  return Point(x: 0, y: p.y);
+}
+
+fn main(): int {
+  let p = Point(x: 3, y: 5);
+  normalize(p); // Compile error: cannot pass constant reference to mutable reference.
+}
+
+mut fn Point::normalize() {
+  normalize(this);
+}
