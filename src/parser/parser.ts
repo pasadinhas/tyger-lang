@@ -1,5 +1,13 @@
 import { assert } from "../assert.ts";
-import type { Program, Statement, Expression, Identifier, NumericLiteral, BinaryExpression } from "../ast/ast.ts";
+import type {
+  Program,
+  Statement,
+  Expression,
+  Identifier,
+  NumericLiteral,
+  BinaryExpression,
+  VariableDeclaration,
+} from "../ast/ast.ts";
 import { type Token, type TokenType } from "../lexer/tokens.ts";
 
 interface Parser {
@@ -45,7 +53,41 @@ function parseProgram(parser: Parser): Program {
 }
 
 function parseStatement(parser: Parser): Statement {
-  return parseExpression(parser);
+  switch (peek(parser).type) {
+    case "let":
+      return parseVariableDeclaration(parser);
+    default:
+      return parseExpression(parser);
+  }
+}
+
+// let [mut] <identifier> = <expression>
+function parseVariableDeclaration(parser: Parser): VariableDeclaration {
+  eat(parser); // let
+
+  let mutable = false;
+  if (peek(parser).type === "mut") {
+    eat(parser); // mut
+    mutable = true;
+  }
+
+  const identifierToken = expect(
+    parser,
+    "Identifier",
+    `Unexpected token: expected an identifier in a variable declaration but got: ${peek(parser).type}`
+  );
+
+  expect(parser, "=", `Unexpected token: Expected an equal sign in a variable declaration but got: ${peek(parser).type}`);
+
+  const initializer = parseExpression(parser);
+  expect(parser, ";", `Unexpected token: Expected a semicolon at the end of a variable declaration but got: ${peek(parser).type}`);
+
+  return {
+    kind: "VariableDeclaration",
+    mutable: mutable,
+    identifier: identifierToken.value,
+    initializer: initializer,
+  };
 }
 
 function parseExpression(parser: Parser): Expression {

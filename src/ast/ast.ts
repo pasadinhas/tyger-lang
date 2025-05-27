@@ -1,5 +1,6 @@
 export type NodeKind =
   | "Program"
+  | "VariableDeclaration"
   | "NumericLiteral"
   | "Identifier"
   | "BinaryExpression";
@@ -11,6 +12,13 @@ export interface Statement {
 export interface Program extends Statement {
   kind: "Program";
   body: Statement[];
+}
+
+export interface VariableDeclaration extends Statement {
+  kind: "VariableDeclaration";
+  mutable: boolean;
+  identifier: string;
+  initializer: Expression;
 }
 
 export interface Expression extends Statement {}

@@ -1,5 +1,6 @@
 export type TokenType =
   | "let"
+  | "mut"
   | "="
   | "+"
   | "-"
@@ -15,12 +16,12 @@ export type TokenType =
 
 export interface Token {
   type: TokenType;
-  value?: string;
+  value: string;
 }
 
 export function token(
   type: TokenType,
-  value: string | undefined = undefined
+  value: string = type
 ): Token {
   return { type, value };
 }

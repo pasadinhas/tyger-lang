@@ -25,6 +25,7 @@ const SingleTokenTests: Record<TokenType, [source: string, value?: string]> = {
   "/": ["/", undefined],
   "%": ["%", undefined],
   let: ["let", undefined],
+  mut: ["mut", undefined],
   Identifier: ["abc", "abc"],
   Number: ["42", "42"],
   EOF: ["", undefined],

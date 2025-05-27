@@ -1,12 +1,67 @@
 import { expect, test } from "vitest";
 import { parse } from "../src/parser/parser.ts";
-import type { BinaryExpression, NumericLiteral, Program } from "../src/ast/ast.ts";
+import type { BinaryExpression, NumericLiteral, Program, VariableDeclaration } from "../src/ast/ast.ts";
 import { token } from "../src/lexer/tokens.ts";
 
 test("empty program", () => {
   expect(parse([token("EOF")])).toStrictEqual({
     kind: "Program",
     body: [],
+  } as Program);
+});
+
+test("variable declaration - mutable", () => {
+  expect(
+    parse([
+      token("let"),
+      token("mut"),
+      token("Identifier", "x"),
+      token("="),
+      token("Number", "5"),
+      token(";"),
+      token("EOF"),
+    ])
+  ).toStrictEqual({
+    kind: "Program",
+    body: [
+      {
+        kind: "VariableDeclaration",
+        mutable: true,
+        identifier: "x",
+        initializer: {
+          kind: "NumericLiteral",
+          raw: "5",
+          value: 5,
+        } as NumericLiteral,
+      } as VariableDeclaration,
+    ],
+  } as Program);
+});
+
+test("variable declaration - constant", () => {
+  expect(
+    parse([
+      token("let"),
+      token("Identifier", "var2"),
+      token("="),
+      token("Number", "42"),
+      token(";"),
+      token("EOF"),
+    ])
+  ).toStrictEqual({
+    kind: "Program",
+    body: [
+      {
+        kind: "VariableDeclaration",
+        mutable: false,
+        identifier: "var2",
+        initializer: {
+          kind: "NumericLiteral",
+          raw: "42",
+          value: 42,
+        } as NumericLiteral,
+      } as VariableDeclaration,
+    ],
   } as Program);
 });
 

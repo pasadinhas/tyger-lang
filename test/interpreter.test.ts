@@ -22,3 +22,7 @@ for (const [expression, expectedResult] of Object.entries(arithmeticExpressions)
     expect(evaluate(parse(lex(expression)), new RuntimeScope())).toBe(expectedResult);
   });
 }
+
+test(`variable declaration`, () => {
+  expect(evaluate(parse(lex("let x = 45; x")), new RuntimeScope())).toBe(45);
+});

@@ -1,5 +1,12 @@
 import { assert } from "../assert.ts";
-import type { Program, Statement, NumericLiteral, BinaryExpression, Identifier } from "../ast/ast.ts";
+import type {
+  Program,
+  Statement,
+  NumericLiteral,
+  BinaryExpression,
+  Identifier,
+  VariableDeclaration,
+} from "../ast/ast.ts";
 
 type RuntimeValueType = "number" | "boolean";
 
@@ -55,6 +62,10 @@ export class RuntimeScope {
     return this.resolve(name).variables.get(name) as RuntimeVariable;
   }
 
+  public hasVariableNoRecursion(name: string): boolean {
+    return this.variables.has(name);
+  }
+
   private resolve(name: string): RuntimeScope {
     if (this.variables.has(name)) {
       return this;
@@ -72,6 +83,8 @@ export function evaluate(statement: Statement, scope: RuntimeScope) {
   switch (statement.kind) {
     case "Program":
       return evaluateProgram(statement as Program, scope);
+    case "VariableDeclaration":
+      return evaluateVariableDeclaration(statement as VariableDeclaration, scope);
     case "NumericLiteral":
       return evaluateNumericLiteral(statement as NumericLiteral, scope);
     case "BinaryExpression":
@@ -87,6 +100,19 @@ function evaluateProgram(program: Program, scope: RuntimeScope) {
     lastEvaluation = evaluate(statement, scope);
   }
   return lastEvaluation;
+}
+
+function evaluateVariableDeclaration(variableDeclaration: VariableDeclaration, scope: RuntimeScope) {
+  if (scope.hasVariableNoRecursion(variableDeclaration.identifier)) {
+    throw `Variable ${variableDeclaration.identifier} is already declared in this scope.`;
+  }
+
+  const value = evaluate(variableDeclaration.initializer, scope);
+  scope.declareVariable(variableDeclaration.identifier, {
+    type: "number",
+    mutable: variableDeclaration.mutable,
+    value: value,
+  });
 }
 
 function evaluateNumericLiteral(numericLiteral: NumericLiteral, scope: RuntimeScope) {
