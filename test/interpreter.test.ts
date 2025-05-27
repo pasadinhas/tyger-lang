@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { evaluate } from "../src/interpreter/interpreter";
+import { evaluate, RuntimeScope } from "../src/interpreter/interpreter";
 import { parse } from "../src/parser/parser";
 import { lex } from "../src/lexer/lexer";
 
@@ -19,6 +19,6 @@ const arithmeticExpressions = {
 
 for (const [expression, expectedResult] of Object.entries(arithmeticExpressions)) {
   test(`arithmetic expression: ${expression}`, () => {
-    expect(evaluate(parse(lex(expression)))).toBe(expectedResult);
+    expect(evaluate(parse(lex(expression)), new RuntimeScope())).toBe(expectedResult);
   });
 }

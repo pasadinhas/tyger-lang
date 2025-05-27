@@ -70,11 +70,11 @@ function parseAdditiveExpression(parser: Parser): Expression {
 }
 
 function parseMultiplicativeExpression(parser: Parser): Expression {
-  let left = parsePrimaryExpression(parser);
+  let left = parseUnaryOperatorExpression(parser);
 
   while (["/", "*", "%"].includes(peek(parser).type)) {
     const operator = eat(parser).type;
-    const right = parsePrimaryExpression(parser);
+    const right = parseUnaryOperatorExpression(parser);
     left = {
       kind: "BinaryExpression",
       left,
@@ -84,6 +84,14 @@ function parseMultiplicativeExpression(parser: Parser): Expression {
   }
 
   return left;
+}
+
+function parseUnaryOperatorExpression(parser: Parser) {
+  return parsePostfixOperatorExpression(parser);
+}
+
+function parsePostfixOperatorExpression(parser: Parser): Expression {
+  return parsePrimaryExpression(parser);
 }
 
 function parsePrimaryExpression(parser: Parser): Expression {

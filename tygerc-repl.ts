@@ -3,7 +3,7 @@
 import readline from "readline";
 import { lex } from "./src/lexer/lexer.ts";
 import { parse } from "./src/parser/parser.ts";
-import { evaluate } from "./src/interpreter/interpreter.ts";
+import { evaluate, RuntimeScope } from "./src/interpreter/interpreter.ts";
 import util from "util";
 
 // change default depth of objects in console.log
@@ -12,11 +12,14 @@ util.inspect.defaultOptions.depth = 10;
 type Mode = "lexer" | "parser" | "interpreter" | "eval";
 let mode: Mode = "interpreter";
 
+const scope = new RuntimeScope();
+scope.declareVariable("pi", {type: "number", value: Math.PI, mutable: false})
+
 const handlers: Record<Mode, (string) => any> = {
   lexer: (line) => lex(line),
   parser: (line) => parse(lex(line)),
-  interpreter: (line) => evaluate(parse(lex(line))),
-  eval: (line) => evaluate(parse(lex(line))),
+  interpreter: (line) => evaluate(parse(lex(line)), scope),
+  eval: (line) => evaluate(parse(lex(line)), scope),
 };
 
 const availableModes = Object.keys(handlers);

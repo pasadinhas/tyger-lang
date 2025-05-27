@@ -1,34 +1,101 @@
 import { assert } from "../assert.ts";
-import type { Program, Statement, NumericLiteral, BinaryExpression } from "../ast/ast.ts";
+import type { Program, Statement, NumericLiteral, BinaryExpression, Identifier } from "../ast/ast.ts";
 
-export function evaluate(statement: Statement) {
-  switch (statement.kind) {
-    case "Program":
-      return evaluateProgram(statement as Program);
-    case "NumericLiteral":
-      return evaluateNumericLiteral(statement as NumericLiteral);
-    case "BinaryExpression":
-      return evaluateBinaryExpression(statement as BinaryExpression);
-    case "Identifier":
-      assert(false, `Interpretation for AST Node ${statement.kind} is not implemented yet.`);
+type RuntimeValueType = "number" | "boolean";
+
+interface RuntimeVariable {
+  type: RuntimeValueType;
+  value: number | boolean;
+  mutable: boolean;
+}
+
+interface NumberRuntimeValue extends RuntimeVariable {
+  type: "number";
+  value: number;
+}
+
+interface BooleanRuntimeValue extends RuntimeVariable {
+  type: "boolean";
+  value: boolean;
+}
+
+export class RuntimeScope {
+  private parent?: RuntimeScope;
+  private variables: Map<string, RuntimeVariable>;
+
+  constructor(parent?: RuntimeScope) {
+    this.parent = parent;
+    this.variables = new Map();
+  }
+
+  public declareVariable(name: string, value: RuntimeVariable): RuntimeVariable {
+    if (this.variables.has(name)) {
+      throw `Cannot re-declare variable: ${name}`;
+    }
+
+    this.variables.set(name, value);
+    return value;
+  }
+
+  public assignVariable(name: string, value: RuntimeVariable): RuntimeVariable {
+    const declaration = this.lookupVariable(name);
+    if (!declaration.mutable) {
+      throw `Cannot assign a value to a non-mutable variable: ${name}`;
+    }
+
+    if (declaration.type !== value.type) {
+      throw `Cannot assign value of type ${value.type} to variable of type ${declaration.type}`;
+    }
+
+    declaration.value = value.value;
+    return declaration;
+  }
+
+  public lookupVariable(name: string): RuntimeVariable {
+    return this.resolve(name).variables.get(name) as RuntimeVariable;
+  }
+
+  private resolve(name: string): RuntimeScope {
+    if (this.variables.has(name)) {
+      return this;
+    }
+
+    if (this.parent == undefined) {
+      throw `Cannot resolve variable: ${name}`;
+    }
+
+    return this.parent.resolve(name);
   }
 }
 
-function evaluateProgram(program: Program) {
+export function evaluate(statement: Statement, scope: RuntimeScope) {
+  switch (statement.kind) {
+    case "Program":
+      return evaluateProgram(statement as Program, scope);
+    case "NumericLiteral":
+      return evaluateNumericLiteral(statement as NumericLiteral, scope);
+    case "BinaryExpression":
+      return evaluateBinaryExpression(statement as BinaryExpression, scope);
+    case "Identifier":
+      return evaluateIdentifier(statement as Identifier, scope);
+  }
+}
+
+function evaluateProgram(program: Program, scope: RuntimeScope) {
   let lastEvaluation: any = null;
   for (const statement of program.body) {
-    lastEvaluation = evaluate(statement);
+    lastEvaluation = evaluate(statement, scope);
   }
   return lastEvaluation;
 }
 
-function evaluateNumericLiteral(numericLiteral: NumericLiteral) {
+function evaluateNumericLiteral(numericLiteral: NumericLiteral, scope: RuntimeScope) {
   return numericLiteral.value;
 }
 
-function evaluateBinaryExpression(binaryExpression: BinaryExpression) {
-  const left = evaluate(binaryExpression.left);
-  const right = evaluate(binaryExpression.right);
+function evaluateBinaryExpression(binaryExpression: BinaryExpression, scope: RuntimeScope) {
+  const left = evaluate(binaryExpression.left, scope);
+  const right = evaluate(binaryExpression.right, scope);
   switch (binaryExpression.operator) {
     case "+":
       return left + right;
@@ -43,4 +110,8 @@ function evaluateBinaryExpression(binaryExpression: BinaryExpression) {
     default:
       assert(false, `Interpretation of Binary operator ${binaryExpression.operator} is not implemented yet.`);
   }
+}
+
+function evaluateIdentifier(identifier: Identifier, scope: RuntimeScope) {
+  return scope.lookupVariable(identifier.name).value;
 }
