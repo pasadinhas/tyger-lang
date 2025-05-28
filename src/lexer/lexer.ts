@@ -62,6 +62,11 @@ function identifierMatcher(src: Source): Token | false {
 const Matchers: Record<TokenType, Matcher> = {
   "let": keywordMatcher("let"),
   "mut": keywordMatcher("mut"),
+  "+=": exactMatcher("+="),
+  "-=": exactMatcher("-="),
+  "*=": exactMatcher("*="),
+  "/=": exactMatcher("/="),
+  "%=": exactMatcher("%="),
   "=": exactMatcher("="),
   "+": exactMatcher("+"),
   "-": exactMatcher("-"),

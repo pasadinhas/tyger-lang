@@ -7,6 +7,7 @@ import type {
   NumericLiteral,
   BinaryExpression,
   VariableDeclaration,
+  AssignmentExpression,
 } from "../ast/ast.ts";
 import { type Token, type TokenType } from "../lexer/tokens.ts";
 
@@ -91,7 +92,24 @@ function parseVariableDeclaration(parser: Parser): VariableDeclaration {
 }
 
 function parseExpression(parser: Parser): Expression {
-  return parseAdditiveExpression(parser);
+  return parseAssignmentExpression(parser);
+}
+
+function parseAssignmentExpression(parser: Parser): Expression {
+  const left = parseAdditiveExpression(parser);
+  
+  if (["=", "+=", "-=", "*=", "/=", "%="].includes(peek(parser).type)) {
+    const operator = eat(parser).type;
+    const right = parseExpression(parser);
+    return {
+      kind: "AssignmentExpression",
+      left,
+      right, 
+      operator
+    } as AssignmentExpression;
+  }
+
+  return left;
 }
 
 function parseAdditiveExpression(parser: Parser): Expression {

@@ -15,6 +15,11 @@ function readTestResourceFile(file: string) {
 }
 
 const SingleTokenTests: Record<TokenType, [source: string, value?: string]> = {
+  "+=": ["+=", undefined],
+  "-=": ["-=", undefined],
+  "*=": ["*=", undefined],
+  "/=": ["/=", undefined],
+  "%=": ["%=", undefined],
   "=": ["=", undefined],
   "(": ["(", undefined],
   ")": [")", undefined],

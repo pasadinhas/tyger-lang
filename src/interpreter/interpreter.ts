@@ -6,6 +6,7 @@ import type {
   BinaryExpression,
   Identifier,
   VariableDeclaration,
+  AssignmentExpression,
 } from "../ast/ast.ts";
 
 type RuntimeValueType = "number" | "boolean";
@@ -85,6 +86,8 @@ export function evaluate(statement: Statement, scope: RuntimeScope) {
       return evaluateProgram(statement as Program, scope);
     case "VariableDeclaration":
       return evaluateVariableDeclaration(statement as VariableDeclaration, scope);
+    case "AssignmentExpression":
+      return evaluateAssignmentExpression(statement as AssignmentExpression, scope);
     case "NumericLiteral":
       return evaluateNumericLiteral(statement as NumericLiteral, scope);
     case "BinaryExpression":
@@ -113,6 +116,49 @@ function evaluateVariableDeclaration(variableDeclaration: VariableDeclaration, s
     mutable: variableDeclaration.mutable,
     value: value,
   });
+}
+
+function evaluateAssignmentExpression(assignmentExpression: AssignmentExpression, scope: RuntimeScope) {
+  if (assignmentExpression.left.kind !== "Identifier") {
+    throw `Cannot assign to ${assignmentExpression.left}`;
+  }
+
+  const variableName = (assignmentExpression.left as Identifier).name;
+  const variableValue = scope.lookupVariable(variableName).value as number;
+  const rightValue = evaluate(assignmentExpression.right, scope);
+
+  let newValue;
+
+  switch (assignmentExpression.operator) {
+    case "=":
+      newValue = rightValue;
+      break;
+    case "+=":
+      newValue = variableValue + rightValue;
+      break;
+    case "-=":
+      newValue = variableValue - rightValue;
+      break;
+    case "*=":
+      newValue = variableValue * rightValue;
+      break;
+    case "/=":
+      newValue = variableValue / rightValue;
+      break;
+    case "%=":
+      newValue = variableValue % rightValue;
+      break;
+    default:
+      assert(false, `invalid assignment operator: ${assignmentExpression.operator}`);
+  }
+
+  scope.assignVariable(variableName, {
+    mutable: true,
+    type: "number",
+    value: newValue,
+  });
+
+  return scope.lookupVariable(variableName).value;
 }
 
 function evaluateNumericLiteral(numericLiteral: NumericLiteral, scope: RuntimeScope) {
