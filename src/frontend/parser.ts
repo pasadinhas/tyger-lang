@@ -8,8 +8,8 @@ import type {
   BinaryExpression,
   VariableDeclaration,
   AssignmentExpression,
-} from "../ast/ast.ts";
-import { type Token, type TokenType } from "../lexer/tokens.ts";
+} from "./ast.ts";
+import type { Token, TokenType } from "./lexer.ts";
 
 interface Parser {
   tokens: Token[];

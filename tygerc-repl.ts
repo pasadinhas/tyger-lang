@@ -1,8 +1,8 @@
 #!/usr/bin/env -S node --no-warnings=ExperimentalWarning
 
 import readline from "readline";
-import { lex } from "./src/lexer/lexer.ts";
-import { parse } from "./src/parser/parser.ts";
+import { lex } from "./src/frontend/lexer.ts";
+import { parse } from "./src/frontend/parser.ts";
 import { evaluate, RuntimeScope } from "./src/interpreter/interpreter.ts";
 import util from "util";
 

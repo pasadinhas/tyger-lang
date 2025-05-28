@@ -7,7 +7,7 @@ import type {
   Identifier,
   VariableDeclaration,
   AssignmentExpression,
-} from "../ast/ast.ts";
+} from "../frontend/ast.ts";
 
 type RuntimeValueType = "number" | "boolean";
 

@@ -1,11 +1,8 @@
 import fs from "fs";
 import url from "url";
 import path from "path";
-import { lex } from "../src/lexer/lexer.ts";
-import { token } from "../src/lexer/tokens.ts";
-import type { TokenType } from "../src/lexer/tokens.ts";
-
 import { expect, test } from "vitest";
+import { lex, token, type TokenType } from "../src/frontend/lexer.ts";
 
 function readTestResourceFile(file: string) {
   const __filename = url.fileURLToPath(import.meta.url);

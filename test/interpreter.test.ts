@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { evaluate, RuntimeScope } from "../src/interpreter/interpreter";
-import { parse } from "../src/parser/parser";
-import { lex } from "../src/lexer/lexer";
+import { parse } from "../src/frontend/parser";
+import { lex } from "../src/frontend/lexer";
 
 // Note: these are not unit tests. They depend on the correct behaviour of the lexer and the parser.
 

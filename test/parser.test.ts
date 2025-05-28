@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
-import { parse } from "../src/parser/parser.ts";
-import type { BinaryExpression, NumericLiteral, Program, VariableDeclaration } from "../src/ast/ast.ts";
-import { token } from "../src/lexer/tokens.ts";
+import { parse } from "../src/frontend/parser.ts";
+import type { BinaryExpression, NumericLiteral, Program, VariableDeclaration } from "../src/frontend/ast.ts";
+import { token } from "../src/frontend/lexer.ts";
 
 test("empty program", () => {
   expect(parse([token("EOF")])).toStrictEqual({
