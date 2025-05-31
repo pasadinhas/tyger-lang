@@ -5,6 +5,12 @@ export type TokenType =
   | "mut"
   | "true"
   | "false"
+  | ">"
+  | ">="
+  | "=="
+  | "<="
+  | "<"
+  | "!="
   | "+="
   | "-="
   | "*="
@@ -133,11 +139,17 @@ const Matchers: Record<TokenType, Matcher> = {
   "mut": keywordMatcher("mut"),
   "true": keywordMatcher("true"),
   "false": keywordMatcher("false"),
+  ">=": exactMatcher(">="),
+  "<=": exactMatcher("<="),
+  "==": exactMatcher("=="),
+  "!=": exactMatcher("!="),
   "+=": exactMatcher("+="),
   "-=": exactMatcher("-="),
   "*=": exactMatcher("*="),
   "/=": exactMatcher("/="),
   "%=": exactMatcher("%="),
+  ">": exactMatcher(">"),
+  "<": exactMatcher("<"),
   "=": exactMatcher("="),
   "+": exactMatcher("+"),
   "-": exactMatcher("-"),

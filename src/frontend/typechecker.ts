@@ -73,9 +73,28 @@ function typecheckBinaryExpression(binaryExpression: BinaryExpression, env: Type
       const resultType = coerceTypes(leftType, rightType);
       typecheckerAssert(
         resultType !== undefined,
-        `Cannot apply operator ${binaryExpression.operator} to types ${typeToString(leftType)} and ${typeToString(rightType)}`
+        `Cannot apply operator ${binaryExpression.operator} to types ${typeToString(leftType)} and ${typeToString(
+          rightType
+        )}`
       );
       binaryExpression.type = resultType;
+      return;
+    case ">":
+    case "<":
+    case ">=":
+    case "<=":
+      // TODO: at least for now lets allow any number to be compared
+      typecheckerAssert(
+        ["int", "float"].includes(leftType.kind) && ["int", "float"].includes(rightType.kind),
+        `Cannot apply operator ${binaryExpression.operator} to types ${typeToString(leftType)} and ${typeToString(
+          rightType
+        )}`
+      );
+      binaryExpression.type = Types.boolean;
+      return;
+    case "==":
+    case "!=":
+      binaryExpression.type = Types.boolean;
       return;
     default:
       assert(false, `Unhandled operator: ${binaryExpression.operator}`);

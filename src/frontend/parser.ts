@@ -97,7 +97,7 @@ function parseExpression(parser: Parser): Expression {
 }
 
 function parseAssignmentExpression(parser: Parser): Expression {
-  const left = parseAdditiveExpression(parser);
+  const left = parseEqualityExpression(parser);
   
   if (["=", "+=", "-=", "*=", "/=", "%="].includes(peek(parser).type)) {
     const operator = eat(parser).type;
@@ -108,6 +108,40 @@ function parseAssignmentExpression(parser: Parser): Expression {
       right, 
       operator
     } as AssignmentExpression;
+  }
+
+  return left;
+}
+
+function parseEqualityExpression(parser: Parser): Expression {
+  let left = parseRelativeExpression(parser);
+
+  while (["==", "!="].includes(peek(parser).type)) {
+    const operator = eat(parser).type;
+    const right = parseRelativeExpression(parser);
+    left = {
+      kind: "BinaryExpression",
+      left,
+      right,
+      operator,
+    } as BinaryExpression;
+  }
+
+  return left;
+}
+
+function parseRelativeExpression(parser: Parser): Expression {
+  let left = parseAdditiveExpression(parser);
+
+  while ([">=", ">", "<", "<="].includes(peek(parser).type)) {
+    const operator = eat(parser).type;
+    const right = parseAdditiveExpression(parser);
+    left = {
+      kind: "BinaryExpression",
+      left,
+      right,
+      operator,
+    } as BinaryExpression;
   }
 
   return left;

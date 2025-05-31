@@ -55,7 +55,7 @@ rl.on("line", (line) => {
     try {
       console.log(handlers[mode](line));
     } catch (err) {
-      console.error(err);
+      console.error(err.message);
     }
   }
 

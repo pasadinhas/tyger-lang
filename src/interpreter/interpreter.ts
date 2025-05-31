@@ -7,6 +7,7 @@ import type {
   Identifier,
   VariableDeclaration,
   AssignmentExpression,
+  BooleanLiteral,
 } from "../frontend/ast.ts";
 
 type RuntimeValueType = "number" | "boolean";
@@ -90,10 +91,14 @@ export function evaluate(statement: Statement, scope: RuntimeScope) {
       return evaluateAssignmentExpression(statement as AssignmentExpression, scope);
     case "NumericLiteral":
       return evaluateNumericLiteral(statement as NumericLiteral, scope);
+    case "BooleanLiteral":
+      return evaluateBooleanLiteral(statement as BooleanLiteral, scope);
     case "BinaryExpression":
       return evaluateBinaryExpression(statement as BinaryExpression, scope);
     case "Identifier":
       return evaluateIdentifier(statement as Identifier, scope);
+    default:
+      assert(false, `Evaluation of statement ${statement.kind} has not been implemented yet.`);
   }
 }
 
@@ -165,6 +170,10 @@ function evaluateNumericLiteral(numericLiteral: NumericLiteral, scope: RuntimeSc
   return numericLiteral.value;
 }
 
+function evaluateBooleanLiteral(booleanLiteral: BooleanLiteral, scope: RuntimeScope) {
+  return booleanLiteral.value;
+}
+
 function evaluateBinaryExpression(binaryExpression: BinaryExpression, scope: RuntimeScope) {
   const left = evaluate(binaryExpression.left, scope);
   const right = evaluate(binaryExpression.right, scope);
@@ -179,6 +188,18 @@ function evaluateBinaryExpression(binaryExpression: BinaryExpression, scope: Run
       return left / right; // TODO: handle division by zero.
     case "%":
       return left % right;
+    case ">=":
+      return left >= right;
+    case ">":
+      return left > right;
+    case "<=":
+      return left <= right;
+    case "<":
+      return left > right;
+    case "==":
+      return left === right;
+    case "!=":
+      return left !== right;
     default:
       assert(false, `Interpretation of Binary operator ${binaryExpression.operator} is not implemented yet.`);
   }
