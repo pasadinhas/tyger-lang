@@ -1,8 +1,11 @@
+import { type Type } from "./types.ts";
+
 export type NodeKind =
   | "Program"
   | "VariableDeclaration"
   | "AssignmentExpression"
   | "NumericLiteral"
+  | "BooleanLiteral"
   | "Identifier"
   | "BinaryExpression";
 
@@ -22,7 +25,9 @@ export interface VariableDeclaration extends Statement {
   initializer: Expression;
 }
 
-export interface Expression extends Statement {}
+export interface Expression extends Statement {
+  type?: Type;
+}
 
 export interface AssignmentExpression extends Expression {
   kind: "AssignmentExpression";
@@ -47,4 +52,10 @@ export interface NumericLiteral extends Expression {
   kind: "NumericLiteral";
   raw: string;
   value: number;
+}
+
+export interface BooleanLiteral extends Expression {
+  kind: "BooleanLiteral";
+  raw: string;
+  value: boolean;
 }

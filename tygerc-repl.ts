@@ -3,23 +3,29 @@
 import readline from "readline";
 import { lex } from "./src/frontend/lexer.ts";
 import { parse } from "./src/frontend/parser.ts";
+import { typecheck } from "./src/frontend/typechecker.ts";
 import { evaluate, RuntimeScope } from "./src/interpreter/interpreter.ts";
 import util from "util";
+import { Types } from "./src/frontend/types.ts";
 
 // change default depth of objects in console.log
 util.inspect.defaultOptions.depth = 10;
 
-type Mode = "lexer" | "parser" | "interpreter" | "eval";
+type Mode = "lexer" | "parser" | "typecheck" | "interpreter" | "eval";
 let mode: Mode = "interpreter";
 
 const scope = new RuntimeScope();
 scope.declareVariable("pi", {type: "number", value: Math.PI, mutable: false})
 
+const globalTypeEnv = new Map();
+globalTypeEnv.set("pi", Types.f64);
+
 const handlers: Record<Mode, (string) => any> = {
   lexer: (line) => lex(line),
-  parser: (line) => parse(lex(line)),
-  interpreter: (line) => evaluate(parse(lex(line)), scope),
-  eval: (line) => evaluate(parse(lex(line)), scope),
+  parser: (line) => parse(handlers.lexer(line)),
+  typecheck: (line) => typecheck(handlers.parser(line), globalTypeEnv),
+  interpreter: (line) => evaluate(handlers.typecheck(line), scope),
+  eval: (line) => handlers.interpreter(line),
 };
 
 const availableModes = Object.keys(handlers);
@@ -49,7 +55,7 @@ rl.on("line", (line) => {
     try {
       console.log(handlers[mode](line));
     } catch (err) {
-      console.error("Error:", err);
+      console.error(err);
     }
   }
 

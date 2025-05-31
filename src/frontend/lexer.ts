@@ -3,6 +3,8 @@ import { assert } from "../assert.ts";
 export type TokenType =
   | "let"
   | "mut"
+  | "true"
+  | "false"
   | "+="
   | "-="
   | "*="
@@ -129,6 +131,8 @@ function identifierMatcher(src: Source): Token | false {
 const Matchers: Record<TokenType, Matcher> = {
   "let": keywordMatcher("let"),
   "mut": keywordMatcher("mut"),
+  "true": keywordMatcher("true"),
+  "false": keywordMatcher("false"),
   "+=": exactMatcher("+="),
   "-=": exactMatcher("-="),
   "*=": exactMatcher("*="),

@@ -5,6 +5,7 @@ import type {
   Expression,
   Identifier,
   NumericLiteral,
+  BooleanLiteral,
   BinaryExpression,
   VariableDeclaration,
   AssignmentExpression,
@@ -167,6 +168,13 @@ function parsePrimaryExpression(parser: Parser): Expression {
         raw: peek(parser).value, // peeking here, and...
         value: Number(eat(parser).value), // ... eating here.
       } as NumericLiteral;
+    case "true":
+    case "false":
+      return {
+        kind: "BooleanLiteral",
+        raw: peek(parser).value, // peeking here, and...
+        value: eat(parser).value === "true", // ... eating here.
+      } as BooleanLiteral;
     case "(":
       eat(parser);
       const expression = parseExpression(parser);

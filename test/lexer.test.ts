@@ -28,6 +28,8 @@ const SingleTokenTests: Record<TokenType, [source: string, value?: string]> = {
   "%": ["%", undefined],
   let: ["let", undefined],
   mut: ["mut", undefined],
+  true: ["true", undefined],
+  false: ["false", undefined],
   Identifier: ["abc", "abc"],
   Number: ["42", "42"],
   EOF: ["", undefined],
