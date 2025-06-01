@@ -88,3 +88,30 @@ export function typeToString(type: Type): string {
       return "unknown";
   }
 }
+
+export function typeFromString(str: string): Type {
+  // Boolean
+  if (str === "boolean") return Types.boolean;
+
+  // Int or float
+  const intMatch = /^(i|u)(8|16|32|64|128)$/.exec(str);
+  if (intMatch) {
+    const [, signed, bits] = intMatch;
+    return {
+      kind: "int",
+      signed: signed === "i",
+      bits: Number(bits) as 8 | 16 | 32 | 64 | 128,
+    };
+  }
+
+  const floatMatch = /^f(8|16|32|64|128)$/.exec(str);
+  if (floatMatch) {
+    const [, bits] = floatMatch;
+    return {
+      kind: "float",
+      bits: Number(bits) as 8 | 16 | 32 | 64 | 128,
+    };
+  }
+
+  throw new Error(`Unknown type: ${str}`);
+}

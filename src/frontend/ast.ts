@@ -23,6 +23,7 @@ export interface VariableDeclaration extends Statement {
   mutable: boolean;
   identifier: string;
   initializer: Expression;
+  typeHint?: string;
 }
 
 export interface Expression extends Statement {

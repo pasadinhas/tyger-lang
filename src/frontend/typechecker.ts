@@ -10,7 +10,7 @@ import type {
   Statement,
   VariableDeclaration,
 } from "./ast.ts";
-import { coerceTypes, isAssignable, type Type, Types, typeToString } from "./types.ts";
+import { coerceTypes, isAssignable, type Type, typeFromString, Types, typeToString } from "./types.ts";
 
 type TypeEnv = Map<string, Type>;
 
@@ -108,12 +108,24 @@ function typecheckIdentifier(identifier: Identifier, env: TypeEnv) {
 }
 
 function typecheckVariableDeclaration(variableDeclaration: VariableDeclaration, env: TypeEnv) {
-  typecheck(variableDeclaration.initializer, env);
-
   const type = env.get(variableDeclaration.identifier);
   typecheckerAssert(type === undefined, `Cannot redeclare variable ${variableDeclaration.identifier}`);
 
-  env.set(variableDeclaration.identifier, variableDeclaration.initializer.type as Type);
+  typecheck(variableDeclaration.initializer, env);
+  const initializerType = variableDeclaration.initializer.type!;
+  if (variableDeclaration.typeHint) {
+    const typeHint = typeFromString(variableDeclaration.typeHint!);
+    typecheckerAssert(
+      isAssignable(typeHint, initializerType),
+      `Cannot assign value of type ${typeToString(initializerType)} to variable hinted as ${typeToString(typeHint)}`
+    )
+
+    // if there is a type hint, the variable is declared with that type
+    env.set(variableDeclaration.identifier, typeHint);
+  } else {
+    // if there is no type hint, we simply assign it the type of the initializer.
+    env.set(variableDeclaration.identifier, initializerType);
+  }
 }
 
 export function typecheckerAssert(condition: unknown, message = "<no message>"): asserts condition {

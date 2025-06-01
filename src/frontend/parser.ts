@@ -79,16 +79,35 @@ function parseVariableDeclaration(parser: Parser): VariableDeclaration {
     `Unexpected token: expected an identifier in a variable declaration but got: ${peek(parser).type}`
   );
 
-  expect(parser, "=", `Unexpected token: Expected an equal sign in a variable declaration but got: ${peek(parser).type}`);
+  let typeHint: string | undefined;
+  if (peek(parser).type === ":") {
+    eat(parser); // :
+    typeHint = expect(
+      parser,
+      "Identifier",
+      `Unexpected token: expected a type identifier in a variable declaration but got: ${peek(parser).type}`
+    ).value;
+  }
+
+  expect(
+    parser,
+    "=",
+    `Unexpected token: Expected an equal sign in a variable declaration but got: ${peek(parser).type}`
+  );
 
   const initializer = parseExpression(parser);
-  expect(parser, ";", `Unexpected token: Expected a semicolon at the end of a variable declaration but got: ${peek(parser).type}`);
+  expect(
+    parser,
+    ";",
+    `Unexpected token: Expected a semicolon at the end of a variable declaration but got: ${peek(parser).type}`
+  );
 
   return {
     kind: "VariableDeclaration",
     mutable: mutable,
     identifier: identifierToken.value,
     initializer: initializer,
+    typeHint: typeHint,
   };
 }
 
@@ -98,15 +117,15 @@ function parseExpression(parser: Parser): Expression {
 
 function parseAssignmentExpression(parser: Parser): Expression {
   const left = parseEqualityExpression(parser);
-  
+
   if (["=", "+=", "-=", "*=", "/=", "%="].includes(peek(parser).type)) {
     const operator = eat(parser).type;
     const right = parseExpression(parser);
     return {
       kind: "AssignmentExpression",
       left,
-      right, 
-      operator
+      right,
+      operator,
     } as AssignmentExpression;
   }
 

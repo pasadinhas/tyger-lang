@@ -25,6 +25,7 @@ export type TokenType =
   | "("
   | ")"
   | ";"
+  | ":"
   | "Identifier"
   | "Number"
   | "EOF";
@@ -159,6 +160,7 @@ const Matchers: Record<TokenType, Matcher> = {
   "(": exactMatcher("("),
   ")": exactMatcher(")"),
   ";": exactMatcher(";"),
+  ":": exactMatcher(":"),
   "Number": numberMatcher,
   "Identifier": identifierMatcher,
   "EOF": () => false, // This token is automatically emitted at the end of input.
