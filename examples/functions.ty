@@ -1,0 +1,13 @@
+fn sum(a: i64, b: i64) -> i64 {
+  return a + b;
+}
+
+fn double(n: i64) -> i64 {
+  return 2 * n;
+}
+
+fn factorial(n: i64) -> i64 {
+  
+}
+
+sum(double(10), double(11));

@@ -5,6 +5,9 @@ export type TokenType =
   | "mut"
   | "true"
   | "false"
+  | "return"
+  | "fn"
+  | "->"
   | ">"
   | ">="
   | "=="
@@ -24,8 +27,11 @@ export type TokenType =
   | "%"
   | "("
   | ")"
+  | "{"
+  | "}"
   | ";"
   | ":"
+  | ","
   | "Identifier"
   | "Number"
   | "EOF";
@@ -136,10 +142,13 @@ function identifierMatcher(src: Source): Token | false {
 }
 
 const Matchers: Record<TokenType, Matcher> = {
+  "fn": keywordMatcher("fn"),
   "let": keywordMatcher("let"),
   "mut": keywordMatcher("mut"),
   "true": keywordMatcher("true"),
   "false": keywordMatcher("false"),
+  "return": keywordMatcher("return"),
+  "->": exactMatcher("->"),
   ">=": exactMatcher(">="),
   "<=": exactMatcher("<="),
   "==": exactMatcher("=="),
@@ -159,8 +168,11 @@ const Matchers: Record<TokenType, Matcher> = {
   "%": exactMatcher("%"),
   "(": exactMatcher("("),
   ")": exactMatcher(")"),
+  "{": exactMatcher("{"),
+  "}": exactMatcher("}"),
   ";": exactMatcher(";"),
   ":": exactMatcher(":"),
+  ",": exactMatcher(","),
   "Number": numberMatcher,
   "Identifier": identifierMatcher,
   "EOF": () => false, // This token is automatically emitted at the end of input.

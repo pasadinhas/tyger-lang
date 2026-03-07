@@ -9,6 +9,11 @@ import type {
   BinaryExpression,
   VariableDeclaration,
   AssignmentExpression,
+  BlockStatement,
+  FunctionDeclaration,
+  ReturnStatement,
+  Param,
+  CallExpression,
 } from "./ast.ts";
 import type { Token, TokenType } from "./lexer.ts";
 
@@ -58,9 +63,59 @@ function parseStatement(parser: Parser): Statement {
   switch (peek(parser).type) {
     case "let":
       return parseVariableDeclaration(parser);
+    case "return":
+      return parseReturnStatement(parser);
+    case "fn":
+      return parseFunctionDeclaration(parser);
+    case "{":
+      return parseBlockStatement(parser);
     default:
-      return parseExpression(parser);
+      return parseExpressionStatement(parser);
   }
+}
+
+function parseExpressionStatement(parser: Parser): Expression {
+  const expression = parseExpression(parser);
+  expect(
+    parser,
+    ";",
+    `Unexpected token: Expected a semicolon at the end of an expression statement but got: ${peek(parser).type}`,
+  );
+  return expression;
+}
+
+function parseBlockStatement(parser: Parser): BlockStatement {
+  const body: Statement[] = [];
+
+  expect(parser, "{", `Unexpected token: expected a '{' at the start of a block but got: ${peek(parser).type}`);
+  while (!match(parser, "}")) {
+    body.push(parseStatement(parser));
+  }
+  expect(parser, "}", `Unexpected token: expected a '}' at the end of a block but got: ${peek(parser).type}`);
+
+  return {
+    kind: "BlockStatement",
+    body: body,
+    returnTypes: [],
+  };
+}
+
+function parseReturnStatement(parser: Parser): ReturnStatement {
+  expect(
+    parser,
+    "return",
+    `Unexpected token: Expected 'return' at the start of a return statement but got: ${peek(parser).type}`,
+  );
+  const expression = parseExpression(parser);
+  expect(
+    parser,
+    ";",
+    `Unexpected token: Expected a semicolon at the end of an expression statement but got: ${peek(parser).type}`,
+  );
+  return {
+    kind: "ReturnStatement",
+    expression: expression,
+  };
 }
 
 // let [mut] <identifier> = <expression>
@@ -76,7 +131,7 @@ function parseVariableDeclaration(parser: Parser): VariableDeclaration {
   const identifierToken = expect(
     parser,
     "Identifier",
-    `Unexpected token: expected an identifier in a variable declaration but got: ${peek(parser).type}`
+    `Unexpected token: expected an identifier in a variable declaration but got: ${peek(parser).type}`,
   );
 
   let typeHint: string | undefined;
@@ -85,21 +140,21 @@ function parseVariableDeclaration(parser: Parser): VariableDeclaration {
     typeHint = expect(
       parser,
       "Identifier",
-      `Unexpected token: expected a type identifier in a variable declaration but got: ${peek(parser).type}`
+      `Unexpected token: expected a type identifier in a variable declaration but got: ${peek(parser).type}`,
     ).value;
   }
 
   expect(
     parser,
     "=",
-    `Unexpected token: Expected an equal sign in a variable declaration but got: ${peek(parser).type}`
+    `Unexpected token: Expected an equal sign in a variable declaration but got: ${peek(parser).type}`,
   );
 
   const initializer = parseExpression(parser);
   expect(
     parser,
     ";",
-    `Unexpected token: Expected a semicolon at the end of a variable declaration but got: ${peek(parser).type}`
+    `Unexpected token: Expected a semicolon at the end of a variable declaration but got: ${peek(parser).type}`,
   );
 
   return {
@@ -109,6 +164,84 @@ function parseVariableDeclaration(parser: Parser): VariableDeclaration {
     initializer: initializer,
     typeHint: typeHint,
   };
+}
+
+// fn <identifier>(<paramsList>) -> <returnType> <blockStatement>
+function parseFunctionDeclaration(parser: Parser): FunctionDeclaration {
+  expect(
+    parser,
+    "fn",
+    `Unexpected token: Expected 'fn' at the start of a function declaration but got: ${peek(parser).type}`,
+  );
+
+  const identifierToken = expect(
+    parser,
+    "Identifier",
+    `Unexpected token: expected an identifier in a variable declaration but got: ${peek(parser).type}`,
+  );
+
+  const params = parseParamsList(parser);
+
+  expect(parser, "->", `Unexpected token: Expected '->' after the function parameters but got: ${peek(parser).type}`);
+
+  let typeHint = expect(
+    parser,
+    "Identifier",
+    `Unexpected token: expected a type identifier in the function declaration return type but got: ${peek(parser).type}`,
+  ).value;
+
+  const body = parseBlockStatement(parser);
+
+  return {
+    kind: "FunctionDeclaration",
+    identifier: identifierToken.value,
+    body: body,
+    typeHint: typeHint,
+    params: params,
+  };
+}
+
+// (arg1: string, arg2: i64)
+function parseParamsList(parser: Parser): Param[] {
+  const params: Param[] = [];
+  expect(parser, "(", `Unexpected token: Expected '(' at the start of the params list but got: ${peek(parser).type}`);
+
+  let i = 0;
+  let trailingComma = false;
+  while (!match(parser, ")")) {
+    trailingComma = false;
+    const identifierToken = expect(
+      parser,
+      "Identifier",
+      `Unexpected token: expected an identifier in a params list but got: ${peek(parser).type}`,
+    );
+
+    expect(parser, ":", `Unexpected token: Expected ':' after the function parameter name but got: ${peek(parser).type}`);
+
+    const typeIdentifierToken = expect(
+      parser,
+      "Identifier",
+      `Unexpected token: expected a type identifier in a params list but got: ${peek(parser).type}`,
+    );
+
+    params.push({
+      name: identifierToken.value,
+      typeHint: typeIdentifierToken.value,
+      index: i++,
+    });
+
+    if (match(parser, ",")) {
+      trailingComma = true;
+      eat(parser); // ,
+    }
+  }
+
+  if (trailingComma) {
+    assert(false, `Unexpected token: found a trailing comma in a params list`);
+  }
+
+  expect(parser, ")", `Unexpected token: Expected ')' after the end of the params list but got: ${peek(parser).type}`);
+  return params;
 }
 
 function parseExpression(parser: Parser): Expression {
@@ -205,7 +338,45 @@ function parseUnaryOperatorExpression(parser: Parser) {
 }
 
 function parsePostfixOperatorExpression(parser: Parser): Expression {
-  return parsePrimaryExpression(parser);
+  let left = parsePrimaryExpression(parser);
+
+  // Use a loop to handle chained postfix operators like: my_function(1)(2)
+  while (match(parser, "(")) {
+    left = parseCallExpression(parser, left);
+  }
+
+  return left;
+}
+
+function parseCallExpression(parser: Parser, callee: Expression): CallExpression {
+  expect(parser, "(", `Unexpected token: expected '(' at the start of a function call arguments list but got: ${peek(parser).type}`);
+  
+  const args: Expression[] = [];
+  let trailingComma = false;
+
+  while (!match(parser, ")")) {
+    trailingComma = false;
+    args.push(parseExpression(parser));
+
+    if (match(parser, ",")) {
+      eat(parser);
+      trailingComma = true;
+    } else {
+      break;
+    }
+  }
+
+  if (trailingComma) {
+    assert(false, "Unexpected token: found a trailing comma in an argument list");
+  }
+
+  expect(parser, ")", `Unexpected token: expected ')' at the end of a function call arguments list but got: ${peek(parser).type}`);
+
+  return {
+    kind: "CallExpression",
+    callee,
+    arguments: args,
+  } as CallExpression;
 }
 
 function parsePrimaryExpression(parser: Parser): Expression {
@@ -234,7 +405,7 @@ function parsePrimaryExpression(parser: Parser): Expression {
       expect(
         parser,
         ")",
-        `Unexpected token at the end of parenthesised expression. Expected  ')', found: ${peek(parser).type}`
+        `Unexpected token at the end of parenthesised expression. Expected  ')', found: ${peek(parser).type}`,
       );
       return expression;
     default:
