@@ -12,6 +12,7 @@ import type {
   BlockStatement,
   CallExpression,
   ReturnStatement,
+  IfStatement,
 } from "../frontend/ast.ts";
 
 type RuntimeValueType = "number" | "boolean" | "function" | "void";
@@ -147,6 +148,8 @@ export function evaluate(statement: Statement, scope: RuntimeScope = new Runtime
       return evaluateBlockStatement(statement as BlockStatement, scope);
     case "ReturnStatement":
       return evaluateReturnStatement(statement as ReturnStatement, scope);
+    case "IfStatement":
+      return evaluateIfStatement(statement as IfStatement, scope);
     default:
       assert(false, `Evaluation of statement ${statement.kind} has not been implemented yet.`);
   }
@@ -248,7 +251,7 @@ function evaluateBinaryExpression(binaryExpression: BinaryExpression, scope: Run
     case "<=":
       return BooleanRuntimeValue(left <= right);
     case "<":
-      return BooleanRuntimeValue(left > right);
+      return BooleanRuntimeValue(left < right);
     case "==":
       return BooleanRuntimeValue(left === right);
     case "!=":
@@ -303,4 +306,15 @@ function evaluateReturnStatement(returnStatement: ReturnStatement, scope: Runtim
   // Using the host's language exception throwing mechanism to halt the execution and return the value
   // This should be caught in the evaluateCallExpression function
   throw new ReturnException(evaluate(returnStatement.expression, scope));
+}
+
+function evaluateIfStatement(ifStatement: IfStatement, scope: RuntimeScope) {
+  const condition = evaluate(ifStatement.condition, scope);
+  if (condition?.value) {
+    return evaluate(ifStatement.then, scope);
+  } else if (ifStatement.else) {
+    return evaluate(ifStatement.else, scope);
+  } else {
+    return Void;
+  }
 }

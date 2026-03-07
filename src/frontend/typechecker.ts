@@ -13,6 +13,7 @@ import type {
   Statement,
   VariableDeclaration,
   CallExpression,
+  IfStatement,
 } from "./ast.ts";
 import { coerceTypes, function_type, isAssignable, type Type, typeFromString, Types, typeToString } from "./types.ts";
 
@@ -88,6 +89,7 @@ const typecheckers: Record<NodeKind, (statement: Statement, context: Context) =>
   BlockStatement: (statement, context) => typecheckBlockStatement(statement as BlockStatement, context),
   ReturnStatement: (statement, context) => typecheckReturnStatement(statement as ReturnStatement, context),
   CallExpression: (statement, context) => typecheckCallExpression(statement as CallExpression, context),
+  IfStatement: (statement, context) => typecheckIfStatement(statement as IfStatement, context),
 };
 
 export function typecheck(statement: Statement, context: Context): Statement {
@@ -262,6 +264,13 @@ function typecheckCallExpression(callExpression: CallExpression, context: Contex
       `Cannot assign value of type ${typeToString(argument!)} to function parameter of type ${typeToString(param)}`,
     );
   }
+}
+
+function typecheckIfStatement(ifStatement: IfStatement, context: Context) {
+  typecheck(ifStatement.condition, context);
+  typecheckerAssert(ifStatement.condition.type!.kind === "boolean", "The condition of an if statement must be a boolean");
+  typecheck(ifStatement.then, context);
+  ifStatement.else && typecheck(ifStatement.else, context);
 }
 
 export function typecheckerAssert(condition: unknown, message = "<no message>"): asserts condition {

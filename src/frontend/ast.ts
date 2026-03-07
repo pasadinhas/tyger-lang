@@ -3,6 +3,7 @@ import { type Type } from "./types.ts";
 export type NodeKind =
   | "Program"
   | "VariableDeclaration"
+  | "IfStatement"
   | "FunctionDeclaration"
   | "BlockStatement"
   | "ReturnStatement"
@@ -47,6 +48,13 @@ export interface FunctionDeclaration extends Statement {
 export interface ReturnStatement extends Statement {
   kind: "ReturnStatement";
   expression: Expression;
+}
+
+export interface IfStatement extends Statement {
+  kind: "IfStatement",
+  condition: Expression;
+  then: Statement;
+  else?: Statement;
 }
 
 export interface BlockStatement extends Statement {

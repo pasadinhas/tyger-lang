@@ -7,6 +7,8 @@ export type TokenType =
   | "false"
   | "return"
   | "fn"
+  | "if"
+  | "else"
   | "->"
   | ">"
   | ">="
@@ -142,6 +144,8 @@ function identifierMatcher(src: Source): Token | false {
 }
 
 const Matchers: Record<TokenType, Matcher> = {
+  "if": keywordMatcher("if"),
+  "else": keywordMatcher("else"),
   "fn": keywordMatcher("fn"),
   "let": keywordMatcher("let"),
   "mut": keywordMatcher("mut"),

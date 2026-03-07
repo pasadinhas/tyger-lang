@@ -14,6 +14,7 @@ import type {
   ReturnStatement,
   Param,
   CallExpression,
+  IfStatement,
 } from "./ast.ts";
 import type { Token, TokenType } from "./lexer.ts";
 
@@ -39,6 +40,10 @@ function expect(parser: Parser, expected: TokenType, errorMessage: string): Toke
     assert(false, errorMessage);
   }
   return eat(parser);
+}
+
+function dump(parser: Parser) {
+  console.log(parser.tokens.slice(parser.current));
 }
 
 export function parse(tokens: Token[]): Program {
@@ -67,6 +72,8 @@ function parseStatement(parser: Parser): Statement {
       return parseReturnStatement(parser);
     case "fn":
       return parseFunctionDeclaration(parser);
+    case "if":
+      return parseIfStatement(parser);
     case "{":
       return parseBlockStatement(parser);
     default:
@@ -82,6 +89,26 @@ function parseExpressionStatement(parser: Parser): Expression {
     `Unexpected token: Expected a semicolon at the end of an expression statement but got: ${peek(parser).type}`,
   );
   return expression;
+}
+
+
+function parseIfStatement(parser: Parser): IfStatement {
+  expect(parser, "if", `Unexpected token: expected 'if' at the start of a if statement but got: ${peek(parser).type}`);
+  const condition = parseExpression(parser);
+  const thenStatement = parseStatement(parser);
+  let elseStatement = undefined;
+
+  if (match(parser, "else")) {
+    eat(parser); // else
+    elseStatement = parseStatement(parser);
+  } 
+
+  return {
+    kind: "IfStatement",
+    condition,
+    then: thenStatement,
+    else: elseStatement,
+  };
 }
 
 function parseBlockStatement(parser: Parser): BlockStatement {
@@ -110,7 +137,7 @@ function parseReturnStatement(parser: Parser): ReturnStatement {
   expect(
     parser,
     ";",
-    `Unexpected token: Expected a semicolon at the end of an expression statement but got: ${peek(parser).type}`,
+    `Unexpected token: Expected a semicolon at the end of a return statement but got: ${peek(parser).type}`,
   );
   return {
     kind: "ReturnStatement",
