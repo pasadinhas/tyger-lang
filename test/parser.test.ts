@@ -27,6 +27,7 @@ test("variable declaration - mutable", () => {
       {
         kind: "VariableDeclaration",
         mutable: true,
+        typeHint: undefined,
         identifier: "x",
         initializer: {
           kind: "NumericLiteral",
@@ -54,6 +55,7 @@ test("variable declaration - constant", () => {
       {
         kind: "VariableDeclaration",
         mutable: false,
+        typeHint: undefined,
         identifier: "var2",
         initializer: {
           kind: "NumericLiteral",
@@ -78,6 +80,7 @@ test("operator precedence: 1 / 2 + (3 - 4) * 5", () => {
     token(")"), 
     token("*"), 
     token("Number", "5"), 
+    token(";"),
     token("EOF")
   ])).toStrictEqual({
     kind: "Program",

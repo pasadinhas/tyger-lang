@@ -2,7 +2,7 @@ export type Type =
   | { kind: "int"; signed: boolean; bits: 8 | 16 | 32 | 64 | 128 }
   | { kind: "float"; bits: 8 | 16 | 32 | 64 | 128 }
   | { kind: "boolean" }
-  | { kind: "Function"; param: Type; return: Type }
+  | { kind: "function"; params: Type[]; return: Type }
   | { kind: "TypeVar"; id: string }; // for inference, optional
 
 export type TypeKind = Type["kind"];
@@ -32,6 +32,10 @@ export const Types: Record<string, Type> = {
   // Boolean
   boolean: { kind: "boolean" } as Type,
 };
+
+export function function_type(paramTypes: Type[] = [], returnType: Type) {
+  return { kind: "function", params: paramTypes, return: returnType } as Type;
+}
 
 export function coerceTypes(left: Type, right: Type): Type | undefined {
   if ((left.kind === "int" || left.kind === "float") && left === right) return left;

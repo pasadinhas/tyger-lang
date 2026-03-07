@@ -8,80 +8,124 @@ import type {
   VariableDeclaration,
   AssignmentExpression,
   BooleanLiteral,
+  FunctionDeclaration,
+  BlockStatement,
+  CallExpression,
+  ReturnStatement,
 } from "../frontend/ast.ts";
 
-type RuntimeValueType = "number" | "boolean";
+type RuntimeValueType = "number" | "boolean" | "function" | "void";
 
-interface RuntimeVariable {
+interface RuntimeSymbol {
   type: RuntimeValueType;
-  value: number | boolean;
+  value: null | number | boolean | BlockStatement;
   mutable: boolean;
 }
 
-interface NumberRuntimeValue extends RuntimeVariable {
+interface VoidRuntimeValue extends RuntimeSymbol {
+  type: "void";
+  value: null;
+}
+
+interface NumberRuntimeValue extends RuntimeSymbol {
   type: "number";
   value: number;
 }
 
-interface BooleanRuntimeValue extends RuntimeVariable {
+interface BooleanRuntimeValue extends RuntimeSymbol {
   type: "boolean";
   value: boolean;
 }
 
+interface FunctionRuntimeValue extends RuntimeSymbol {
+  type: "function";
+  params: string[];
+  value: BlockStatement;
+}
+
+function NumberRuntimeValue(value: number): NumberRuntimeValue {
+  return {
+    type: "number",
+    value,
+    mutable: true,
+  };
+}
+
+function BooleanRuntimeValue(value: boolean): BooleanRuntimeValue {
+  return {
+    type: "boolean",
+    value,
+    mutable: true,
+  };
+}
+
+const Void: VoidRuntimeValue = {
+  type: "void",
+  value: null,
+  mutable: false,
+};
+
+class ReturnException {
+  value: null;
+  constructor(value: any) {
+    this.value = value;
+  }
+}
+
 export class RuntimeScope {
   private parent?: RuntimeScope;
-  private variables: Map<string, RuntimeVariable>;
+  private symbols: Map<string, RuntimeSymbol>;
 
   constructor(parent?: RuntimeScope) {
     this.parent = parent;
-    this.variables = new Map();
+    this.symbols = new Map();
   }
 
-  public declareVariable(name: string, value: RuntimeVariable): RuntimeVariable {
-    if (this.variables.has(name)) {
-      throw `Cannot re-declare variable: ${name}`;
+  declare(name: string, value: RuntimeSymbol): RuntimeSymbol {
+    if (this.symbols.has(name)) {
+      throw `Cannot re-declare symbol: ${name}`;
     }
 
-    this.variables.set(name, value);
+    this.symbols.set(name, value);
     return value;
   }
 
-  public assignVariable(name: string, value: RuntimeVariable): RuntimeVariable {
-    const declaration = this.lookupVariable(name);
+  set(name: string, value: RuntimeSymbol): RuntimeSymbol {
+    const declaration = this.lookup(name);
     if (!declaration.mutable) {
-      throw `Cannot assign a value to a non-mutable variable: ${name}`;
+      throw `Cannot assign a value to a non-mutable symbol: ${name}`;
     }
 
     if (declaration.type !== value.type) {
-      throw `Cannot assign value of type ${value.type} to variable of type ${declaration.type}`;
+      throw `Cannot assign value of type ${value.type} to symbol of type ${declaration.type}`;
     }
 
     declaration.value = value.value;
     return declaration;
   }
 
-  public lookupVariable(name: string): RuntimeVariable {
-    return this.resolve(name).variables.get(name) as RuntimeVariable;
+  lookup(name: string): RuntimeSymbol {
+    return this.resolve(name).symbols.get(name) as RuntimeSymbol;
   }
 
-  public hasVariableNoRecursion(name: string): boolean {
-    return this.variables.has(name);
+  hasSymbolNoRecursion(name: string): boolean {
+    return this.symbols.has(name);
   }
 
-  private resolve(name: string): RuntimeScope {
-    if (this.variables.has(name)) {
+  resolve(name: string): RuntimeScope {
+    if (this.symbols.has(name)) {
       return this;
     }
 
     if (this.parent == undefined) {
-      throw `Cannot resolve variable: ${name}`;
+      throw `Cannot resolve symbol: ${name}`;
     }
 
     return this.parent.resolve(name);
   }
 }
 
-export function evaluate(statement: Statement, scope: RuntimeScope) {
+export function evaluate(statement: Statement, scope: RuntimeScope = new RuntimeScope()): any {
   switch (statement.kind) {
     case "Program":
       return evaluateProgram(statement as Program, scope);
@@ -97,30 +141,42 @@ export function evaluate(statement: Statement, scope: RuntimeScope) {
       return evaluateBinaryExpression(statement as BinaryExpression, scope);
     case "Identifier":
       return evaluateIdentifier(statement as Identifier, scope);
+    case "CallExpression":
+      return evaluateCallExpression(statement as CallExpression, scope);
+    case "BlockStatement":
+      return evaluateBlockStatement(statement as BlockStatement, scope);
+    case "ReturnStatement":
+      return evaluateReturnStatement(statement as ReturnStatement, scope);
     default:
       assert(false, `Evaluation of statement ${statement.kind} has not been implemented yet.`);
   }
 }
 
 function evaluateProgram(program: Program, scope: RuntimeScope) {
+  // First detect all available functions
+  for (const statement of program.body) {
+    if (statement.kind === "FunctionDeclaration") {
+      evaluateFunctionDeclaration(statement as FunctionDeclaration, scope);
+    }
+  }
+
+  // Execute all other statements
   let lastEvaluation: any = null;
   for (const statement of program.body) {
-    lastEvaluation = evaluate(statement, scope);
+    if (statement.kind !== "FunctionDeclaration") {
+      lastEvaluation = evaluate(statement, scope);
+    }
   }
   return lastEvaluation;
 }
 
 function evaluateVariableDeclaration(variableDeclaration: VariableDeclaration, scope: RuntimeScope) {
-  if (scope.hasVariableNoRecursion(variableDeclaration.identifier)) {
+  if (scope.hasSymbolNoRecursion(variableDeclaration.identifier)) {
     throw `Variable ${variableDeclaration.identifier} is already declared in this scope.`;
   }
 
   const value = evaluate(variableDeclaration.initializer, scope);
-  scope.declareVariable(variableDeclaration.identifier, {
-    type: "number",
-    mutable: variableDeclaration.mutable,
-    value: value,
-  });
+  scope.declare(variableDeclaration.identifier, value);
 }
 
 function evaluateAssignmentExpression(assignmentExpression: AssignmentExpression, scope: RuntimeScope) {
@@ -129,7 +185,7 @@ function evaluateAssignmentExpression(assignmentExpression: AssignmentExpression
   }
 
   const variableName = (assignmentExpression.left as Identifier).name;
-  const variableValue = scope.lookupVariable(variableName).value as number;
+  const variableValue = scope.lookup(variableName).value as number;
   const rightValue = evaluate(assignmentExpression.right, scope);
 
   let newValue;
@@ -157,54 +213,94 @@ function evaluateAssignmentExpression(assignmentExpression: AssignmentExpression
       assert(false, `invalid assignment operator: ${assignmentExpression.operator}`);
   }
 
-  scope.assignVariable(variableName, {
-    mutable: true,
-    type: "number",
-    value: newValue,
-  });
+  scope.set(variableName, NumberRuntimeValue(newValue));
 
-  return scope.lookupVariable(variableName).value;
+  return scope.lookup(variableName);
 }
 
 function evaluateNumericLiteral(numericLiteral: NumericLiteral, scope: RuntimeScope) {
-  return numericLiteral.value;
+  return NumberRuntimeValue(numericLiteral.value);
 }
 
 function evaluateBooleanLiteral(booleanLiteral: BooleanLiteral, scope: RuntimeScope) {
-  return booleanLiteral.value;
+  return BooleanRuntimeValue(booleanLiteral.value);
 }
 
 function evaluateBinaryExpression(binaryExpression: BinaryExpression, scope: RuntimeScope) {
-  const left = evaluate(binaryExpression.left, scope);
-  const right = evaluate(binaryExpression.right, scope);
+  const left = evaluate(binaryExpression.left, scope).value;
+  const right = evaluate(binaryExpression.right, scope).value;
+
   switch (binaryExpression.operator) {
     case "+":
-      return left + right;
+      return NumberRuntimeValue(left + right);
     case "-":
-      return left - right;
+      return NumberRuntimeValue(left - right);
     case "*":
-      return left * right;
+      return NumberRuntimeValue(left * right);
     case "/":
-      return left / right; // TODO: handle division by zero.
+      return NumberRuntimeValue(left / right); // TODO: handle division by zero.
     case "%":
-      return left % right;
+      return NumberRuntimeValue(left % right);
     case ">=":
-      return left >= right;
+      return BooleanRuntimeValue(left >= right);
     case ">":
-      return left > right;
+      return BooleanRuntimeValue(left > right);
     case "<=":
-      return left <= right;
+      return BooleanRuntimeValue(left <= right);
     case "<":
-      return left > right;
+      return BooleanRuntimeValue(left > right);
     case "==":
-      return left === right;
+      return BooleanRuntimeValue(left === right);
     case "!=":
-      return left !== right;
+      return BooleanRuntimeValue(left !== right);
     default:
       assert(false, `Interpretation of Binary operator ${binaryExpression.operator} is not implemented yet.`);
   }
 }
 
 function evaluateIdentifier(identifier: Identifier, scope: RuntimeScope) {
-  return scope.lookupVariable(identifier.name).value;
+  return scope.lookup(identifier.name);
+}
+
+function evaluateFunctionDeclaration(functionDeclaration: FunctionDeclaration, scope: RuntimeScope) {
+  scope.declare(functionDeclaration.identifier, {
+    type: "function",
+    value: functionDeclaration.body,
+    mutable: false,
+    params: functionDeclaration.params.map((param) => param.name),
+  } as FunctionRuntimeValue);
+}
+
+function evaluateCallExpression(callExpression: CallExpression, scope: RuntimeScope) {
+  const fn = evaluate(callExpression.callee, scope) as FunctionRuntimeValue;
+  const functionScope = new RuntimeScope(scope);
+  for (let i = 0; i < fn.params.length; ++i) {
+    functionScope.declare(fn.params[i], evaluate(callExpression.arguments[i], scope));
+  }
+
+  try {
+    evaluate(fn.value, functionScope);
+  } catch (throwable) {
+    if (throwable instanceof ReturnException) {
+      return throwable.value;
+    }
+    throw throwable;
+  }
+
+  return Void;
+}
+
+function evaluateBlockStatement(blockStatement: BlockStatement, scope: RuntimeScope) {
+  const blockScope = new RuntimeScope(scope);
+  let lastEvaluation = null;
+  for (const statement of blockStatement.body) {
+    lastEvaluation = evaluate(statement, blockScope);
+  }
+  return lastEvaluation;
+}
+
+function evaluateReturnStatement(returnStatement: ReturnStatement, scope: RuntimeScope) {
+  // Using the host's language exception throwing mechanism to halt the execution and return the value
+  // This should be caught in the evaluateCallExpression function
+  throw new ReturnException(evaluate(returnStatement.expression, scope));
 }

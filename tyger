@@ -1,0 +1,59 @@
+#!/usr/bin/env -S node --no-warnings=ExperimentalWarning --experimental-strip-types --trace-uncaught
+
+import fs from 'fs';
+import path from 'path';
+import { lex } from "./src/frontend/lexer.ts";
+import { parse } from "./src/frontend/parser.ts";
+import { Context, typecheck } from "./src/frontend/typechecker.ts";
+import { evaluate, RuntimeScope } from "./src/interpreter/interpreter.ts";
+import util from "util";
+
+// change default depth of objects in console.log
+util.inspect.defaultOptions.depth = 10;
+
+const filename = process.argv[3];
+if (!filename) {
+  printUsage();
+  process.exit(1); 
+}
+
+let source;
+try {
+  const filePath = path.resolve(filename);
+  source = fs.readFileSync(filePath, 'utf8');
+} catch (err) {
+  console.error(`Error reading file "${filename}":`, err.message);
+  process.exit(1);
+}
+
+  const mode = process.argv[2];
+  switch (mode) {
+    case "lex": console.log(lex(source)); break;
+    case "parse": console.log(parse(lex(source))); break;
+    case "typecheck": console.log(typecheck(parse(lex(source)), new Context())); break;
+    case "run": console.log(evaluate(typecheck(parse(lex(source)), new Context()), new RuntimeScope())); break;
+    default:
+      console.error(`Error: invalid mode: ${mode}`);
+      printUsage();
+      process.exit(1);
+  }
+
+function printUsage() {
+  console.log(`
+Usage: tyger <mode> <filename>
+
+A compiler and interpreter for the Tyger programming language.
+
+Modes:
+  lex           Scans the source file and prints the resulting tokens.
+  parse         Parses the source file and prints the abstract syntax tree (AST).
+  typecheck     Parses and type-checks the source file for errors.
+  run           Executes the program using a tree-walking interpreter.
+
+Arguments:
+  filename      The path to the source file to process.
+
+Example:
+  tyger lex ./examples/hello.ty
+  `);
+}

@@ -1,0 +1,4 @@
+let factor: i64 = 3;
+let n: i64 = 21;
+
+n * factor + 1;

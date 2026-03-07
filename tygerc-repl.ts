@@ -15,7 +15,7 @@ type Mode = "lexer" | "parser" | "typecheck" | "interpreter" | "eval";
 let mode: Mode = "interpreter";
 
 const scope = new RuntimeScope();
-scope.declareVariable("pi", {type: "number", value: Math.PI, mutable: false})
+scope.declare("pi", {type: "number", value: Math.PI, mutable: false})
 
 const globalTypeEnv = new Map();
 globalTypeEnv.set("pi", Types.f64);
