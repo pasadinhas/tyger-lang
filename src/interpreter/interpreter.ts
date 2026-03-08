@@ -13,13 +13,14 @@ import type {
   CallExpression,
   ReturnStatement,
   IfStatement,
+  StringLiteral,
 } from "../frontend/ast.ts";
 
-type RuntimeValueType = "number" | "boolean" | "function" | "void";
+type RuntimeValueType = "number" | "boolean" | "string" | "function" | "void";
 
 interface RuntimeSymbol {
   type: RuntimeValueType;
-  value: null | number | boolean | BlockStatement;
+  value: null | number | boolean | string | BlockStatement;
   mutable: boolean;
 }
 
@@ -36,6 +37,11 @@ interface NumberRuntimeValue extends RuntimeSymbol {
 interface BooleanRuntimeValue extends RuntimeSymbol {
   type: "boolean";
   value: boolean;
+}
+
+interface StringRuntimeValue extends RuntimeSymbol {
+  type: "string";
+  value: string;
 }
 
 interface FunctionRuntimeValue extends RuntimeSymbol {
@@ -57,6 +63,14 @@ function BooleanRuntimeValue(value: boolean): BooleanRuntimeValue {
     type: "boolean",
     value,
     mutable: true,
+  };
+}
+
+function StringRuntimeValue(value: string): StringRuntimeValue {
+  return {
+    type: "string",
+    value,
+    mutable: false,
   };
 }
 
@@ -138,6 +152,8 @@ export function evaluate(statement: Statement, scope: RuntimeScope = new Runtime
       return evaluateNumericLiteral(statement as NumericLiteral, scope);
     case "BooleanLiteral":
       return evaluateBooleanLiteral(statement as BooleanLiteral, scope);
+    case "StringLiteral":
+      return evaluateStringLiteral(statement as StringLiteral, scope);
     case "BinaryExpression":
       return evaluateBinaryExpression(statement as BinaryExpression, scope);
     case "Identifier":
@@ -227,6 +243,10 @@ function evaluateNumericLiteral(numericLiteral: NumericLiteral, scope: RuntimeSc
 
 function evaluateBooleanLiteral(booleanLiteral: BooleanLiteral, scope: RuntimeScope) {
   return BooleanRuntimeValue(booleanLiteral.value);
+}
+
+function evaluateStringLiteral(stringLiteral: StringLiteral, scope: RuntimeScope) {
+  return StringRuntimeValue(stringLiteral.value);
 }
 
 function evaluateBinaryExpression(binaryExpression: BinaryExpression, scope: RuntimeScope) {

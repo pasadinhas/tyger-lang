@@ -2,6 +2,7 @@ export type Type =
   | { kind: "int"; signed: boolean; bits: 8 | 16 | 32 | 64 | 128 }
   | { kind: "float"; bits: 8 | 16 | 32 | 64 | 128 }
   | { kind: "boolean" }
+  | { kind: "string" }
   | { kind: "function"; params: Type[]; return: Type }
   | { kind: "TypeVar"; id: string }; // for inference, optional
 
@@ -31,6 +32,9 @@ export const Types: Record<string, Type> = {
 
   // Boolean
   boolean: { kind: "boolean" } as Type,
+
+  // String
+  string: { kind: "string" } as Type,
 };
 
 export function function_type(paramTypes: Type[] = [], returnType: Type) {
@@ -84,6 +88,8 @@ export function typeToString(type: Type): string {
       return `f${type.bits}`;
     case "boolean":
       return "boolean";
+    case "string":
+      return "string";
     case "Function":
       return `(${typeToString(type.param)} -> ${typeToString(type.return)})`;
     case "TypeVar":
@@ -94,6 +100,9 @@ export function typeToString(type: Type): string {
 }
 
 export function typeFromString(str: string): Type {
+  // String
+  if (str === "string") return Types.string;
+
   // Boolean
   if (str === "boolean") return Types.boolean;
 

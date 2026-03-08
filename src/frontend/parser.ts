@@ -15,6 +15,7 @@ import type {
   Param,
   CallExpression,
   IfStatement,
+  StringLiteral,
 } from "./ast.ts";
 import type { Token, TokenType } from "./lexer.ts";
 
@@ -413,6 +414,11 @@ function parsePrimaryExpression(parser: Parser): Expression {
         kind: "Identifier",
         name: eat(parser).value,
       } as Identifier;
+    case "String":
+      return {
+        kind: "StringLiteral",
+        value: eat(parser).value,
+      } as StringLiteral
     case "Number":
       return {
         kind: "NumericLiteral",

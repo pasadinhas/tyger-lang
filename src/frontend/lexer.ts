@@ -34,6 +34,7 @@ export type TokenType =
   | ";"
   | ":"
   | ","
+  | "String"
   | "Identifier"
   | "Number"
   | "EOF";
@@ -43,10 +44,7 @@ export interface Token {
   value: string;
 }
 
-export function token(
-  type: TokenType,
-  value: string = type
-): Token {
+export function token(type: TokenType, value: string = type): Token {
   return { type, value };
 }
 
@@ -111,8 +109,7 @@ function keywordMatcher(type: TokenType, keyword: string = type): Matcher {
 }
 
 function exactMatcher(type: TokenType, value: string = type): Matcher {
-  return (src) =>
-    src.match(value) && src.advance(value.length) && token(type, undefined);
+  return (src) => src.match(value) && src.advance(value.length) && token(type, undefined);
 }
 
 function isDigit(char: string) {
@@ -122,10 +119,7 @@ function isDigit(char: string) {
   return code >= 48 && code <= 57;
 }
 
-function matchWhile(
-  src: Source,
-  ...predicates: ((char: string) => boolean)[]
-): number {
+function matchWhile(src: Source, ...predicates: ((char: string) => boolean)[]): number {
   let offset = 0;
   for (const predicate of predicates) {
     while (predicate(src.peek(offset))) offset++;
@@ -143,15 +137,53 @@ function identifierMatcher(src: Source): Token | false {
   return offset > 0 && token("Identifier", src.take(offset));
 }
 
+function stringMatcher(src: Source): Token | false {
+  if (src.peek() !== '"') {
+    return false;
+  }
+
+  src.take(1); // take the opening "
+  let offset = 0;
+  let str = "";
+  while (!['"', "\0"].includes(src.peek(offset))) {
+    if (src.peek(offset) === "\\") {
+      // Handle backslash escaping
+      offset++;
+      const EscapeCharactersMapping = new Map();
+
+      EscapeCharactersMapping.set("n", "\n");
+      EscapeCharactersMapping.set("t", "\t");
+      EscapeCharactersMapping.set('"', '"');
+      EscapeCharactersMapping.set("0", "\0");
+
+      const escapedCharacter = EscapeCharactersMapping.get(src.peek(offset));
+      if (!escapedCharacter) {
+        assert(false, `Unknown string escaped character: \\${src.peek(offset)}`);
+      }
+      str += escapedCharacter;
+    } else {
+      str += src.peek(offset);
+    }
+    offset++;
+  }
+
+  src.take(offset); // take the string contents from the source
+  
+  assert(src.peek() === '"', `String was not closed.`);
+  src.take(1); // closing "
+
+  return { type: "String", value: str }
+}
+
 const Matchers: Record<TokenType, Matcher> = {
-  "if": keywordMatcher("if"),
-  "else": keywordMatcher("else"),
-  "fn": keywordMatcher("fn"),
-  "let": keywordMatcher("let"),
-  "mut": keywordMatcher("mut"),
-  "true": keywordMatcher("true"),
-  "false": keywordMatcher("false"),
-  "return": keywordMatcher("return"),
+  if: keywordMatcher("if"),
+  else: keywordMatcher("else"),
+  fn: keywordMatcher("fn"),
+  let: keywordMatcher("let"),
+  mut: keywordMatcher("mut"),
+  true: keywordMatcher("true"),
+  false: keywordMatcher("false"),
+  return: keywordMatcher("return"),
   "->": exactMatcher("->"),
   ">=": exactMatcher(">="),
   "<=": exactMatcher("<="),
@@ -177,9 +209,10 @@ const Matchers: Record<TokenType, Matcher> = {
   ";": exactMatcher(";"),
   ":": exactMatcher(":"),
   ",": exactMatcher(","),
-  "Number": numberMatcher,
-  "Identifier": identifierMatcher,
-  "EOF": () => false, // This token is automatically emitted at the end of input.
+  String: stringMatcher,
+  Number: numberMatcher,
+  Identifier: identifierMatcher,
+  EOF: () => false, // This token is automatically emitted at the end of input.
 };
 
 function isWhiteSpace(char: string): boolean {
@@ -205,12 +238,7 @@ export function lex(source: string): Token[] {
         src.advance(1);
         continue;
       }
-      assert(
-        false,
-        `Invalid input: ${src.peek()} (code: ${src
-          .peek()
-          .charCodeAt(0)}, at: ${src.position()})`
-      );
+      assert(false, `Invalid input: ${src.peek()} (code: ${src.peek().charCodeAt(0)}, at: ${src.position()})`);
     }
   }
 

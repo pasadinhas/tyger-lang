@@ -14,6 +14,7 @@ import type {
   VariableDeclaration,
   CallExpression,
   IfStatement,
+  StringLiteral,
 } from "./ast.ts";
 import { coerceTypes, function_type, isAssignable, type Type, typeFromString, Types, typeToString } from "./types.ts";
 
@@ -80,6 +81,7 @@ const typecheckers: Record<NodeKind, (statement: Statement, context: Context) =>
   Program: (statement, context) => typecheckProgram(statement as Program, context),
   NumericLiteral: (statement, context) => typecheckNumericLiteral(statement as NumericLiteral, context),
   BooleanLiteral: (statement, context) => typecheckBooleanLiteral(statement as BooleanLiteral, context),
+  StringLiteral: (statement, context) => typecheckStringLiteral(statement as StringLiteral, context),
   AssignmentExpression: (statement, context) =>
     typecheckAssignmentExpression(statement as AssignmentExpression, context),
   BinaryExpression: (statement, context) => typecheckBinaryExpression(statement as BinaryExpression, context),
@@ -124,6 +126,10 @@ function typecheckNumericLiteral(numericLiteral: NumericLiteral, context: Contex
 
 function typecheckBooleanLiteral(booleanLiteral: BooleanLiteral, context: Context) {
   booleanLiteral.type = Types.boolean;
+}
+
+function typecheckStringLiteral(stringLiteral: StringLiteral, context: Context) {
+  stringLiteral.type = Types.string;
 }
 
 function typecheckAssignmentExpression(assignmentExpression: AssignmentExpression, context: Context) {

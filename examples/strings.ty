@@ -1,0 +1,6 @@
+
+fn lowercase(str: string) -> string {
+  return "syke";
+}
+
+lowercase("jello");

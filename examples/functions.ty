@@ -15,4 +15,8 @@ fn factorial(n: i64) -> i64 {
   }
 }
 
+fn lowercase(str: string) -> string {
+  return "syke";
+}
+
 sum(sum(double(factorial(5)), double(11)), 0-6);

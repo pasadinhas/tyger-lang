@@ -10,6 +10,7 @@ export type NodeKind =
   | "AssignmentExpression"
   | "CallExpression"
   | "NumericLiteral"
+  | "StringLiteral"
   | "BooleanLiteral"
   | "Identifier"
   | "BinaryExpression";
@@ -96,6 +97,11 @@ export interface NumericLiteral extends Expression {
   kind: "NumericLiteral";
   raw: string;
   value: number;
+}
+
+export interface StringLiteral extends Expression {
+  kind: "StringLiteral";
+  value: string;
 }
 
 export interface BooleanLiteral extends Expression {
