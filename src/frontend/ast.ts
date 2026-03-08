@@ -5,6 +5,7 @@ export type NodeKind =
   | "VariableDeclaration"
   | "IfStatement"
   | "FunctionDeclaration"
+  | "ExternalFunctionDeclaration"
   | "BlockStatement"
   | "ReturnStatement"
   | "AssignmentExpression"
@@ -44,6 +45,14 @@ export interface FunctionDeclaration extends Statement {
   typeHint: string;
   body: BlockStatement;
   params: Param[];
+}
+
+export interface ExternalFunctionDeclaration extends Statement {
+  kind: "ExternalFunctionDeclaration";
+  identifier: string;
+  typeHint: string;
+  params: Param[];
+  isVariadic: boolean;
 }
 
 export interface ReturnStatement extends Statement {

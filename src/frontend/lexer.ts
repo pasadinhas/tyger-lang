@@ -6,9 +6,11 @@ export type TokenType =
   | "true"
   | "false"
   | "return"
+  | "extern"
   | "fn"
   | "if"
   | "else"
+  | "..."
   | "->"
   | ">"
   | ">="
@@ -184,6 +186,8 @@ const Matchers: Record<TokenType, Matcher> = {
   true: keywordMatcher("true"),
   false: keywordMatcher("false"),
   return: keywordMatcher("return"),
+  extern: keywordMatcher("extern"),
+  "...": exactMatcher("..."),
   "->": exactMatcher("->"),
   ">=": exactMatcher(">="),
   "<=": exactMatcher("<="),

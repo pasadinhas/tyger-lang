@@ -4,6 +4,8 @@ export type Type =
   | { kind: "boolean" }
   | { kind: "string" }
   | { kind: "function"; params: Type[]; return: Type }
+  | { kind: "external_function"; params: Type[]; return: Type, isVariadic: boolean }
+  | { kind: "ptr" }
   | { kind: "TypeVar"; id: string }; // for inference, optional
 
 export type TypeKind = Type["kind"];
@@ -35,10 +37,17 @@ export const Types: Record<string, Type> = {
 
   // String
   string: { kind: "string" } as Type,
+
+  // LLVM ptr for external functions
+  ptr: { kind: "ptr" },
 };
 
 export function function_type(paramTypes: Type[] = [], returnType: Type) {
   return { kind: "function", params: paramTypes, return: returnType } as Type;
+}
+
+export function external_function_type(paramTypes: Type[] = [], returnType: Type, isVariadic: boolean) {
+  return { kind: "external_function", params: paramTypes, return: returnType, isVariadic } as Type;
 }
 
 export function coerceTypes(left: Type, right: Type): Type | undefined {
@@ -90,18 +99,23 @@ export function typeToString(type: Type): string {
       return "boolean";
     case "string":
       return "string";
-    case "Function":
-      return `(${typeToString(type.param)} -> ${typeToString(type.return)})`;
+    case "function":
+      return `(${type.params.map(typeToString).join(", ")} -> ${typeToString(type.return)})`;
+    case "external_function":
+      return `(${type.params.map(typeToString).join(", ")} -> ${typeToString(type.return)})`;
     case "TypeVar":
       return `'${type.id}`;
     default:
-      return "unknown";
+      return `unknown[${JSON.stringify(type)}]`;
   }
 }
 
 export function typeFromString(str: string): Type {
   // String
   if (str === "string") return Types.string;
+
+  // ptr
+  if (str === "ptr") return Types.ptr;
 
   // Boolean
   if (str === "boolean") return Types.boolean;
