@@ -16,6 +16,7 @@ import type {
   CallExpression,
   IfStatement,
   StringLiteral,
+  ExternalFunctionDeclaration,
 } from "./ast.ts";
 import type { Token, TokenType } from "./lexer.ts";
 
@@ -67,6 +68,8 @@ function parseProgram(parser: Parser): Program {
 
 function parseStatement(parser: Parser): Statement {
   switch (peek(parser).type) {
+    case "extern":
+      return parseExternalFunctionDeclaration(parser);
     case "let":
       return parseVariableDeclaration(parser);
     case "return":
@@ -194,7 +197,96 @@ function parseVariableDeclaration(parser: Parser): VariableDeclaration {
   };
 }
 
-// fn <identifier>(<paramsList>) -> <returnType> <blockStatement>
+function parseExternalFunctionDeclaration(parser: Parser): ExternalFunctionDeclaration {
+  expect(
+    parser,
+    "extern",
+    `Unexpected token: Expected 'extern' at the start of an external function declaration but got: ${peek(parser).type}`,
+  );
+
+  expect(
+    parser,
+    "fn",
+    `Unexpected token: Expected 'fn' after 'extern' but got: ${peek(parser).type}`,
+  );
+
+  const identifierToken = expect(
+    parser,
+    "Identifier",
+    `Unexpected token: expected an identifier in an external function declaration but got: ${peek(parser).type}`,
+  );
+
+  const params: Param[] = [];
+  expect(parser, "(", `Unexpected token: Expected '(' at the start of the params list but got: ${peek(parser).type}`);
+
+  let isVariadic = false;
+  let i = 0;
+  let trailingComma = false;
+  while (!match(parser, ")")) {
+    trailingComma = false;
+    if (match(parser, "...")) {
+      eat(parser); // ...
+      isVariadic = true;
+      if (!match(parser, ")")) {
+        assert(false, `Unexpected token: Expected ')' after '...' as the variadic argument of an external function must be the last argument, but got: ${peek(parser).type}`);
+      }
+      break;
+    }
+    const identifierToken = expect(
+      parser,
+      "Identifier",
+      `Unexpected token: expected an identifier in a params list but got: ${peek(parser).type}`,
+    );
+
+    expect(parser, ":", `Unexpected token: Expected ':' after the function parameter name but got: ${peek(parser).type}`);
+
+    const typeIdentifierToken = expect(
+      parser,
+      "Identifier",
+      `Unexpected token: expected a type identifier in a params list but got: ${peek(parser).type}`,
+    );
+
+    params.push({
+      name: identifierToken.value,
+      typeHint: typeIdentifierToken.value,
+      index: i++,
+    });
+
+    if (match(parser, ",")) {
+      trailingComma = true;
+      eat(parser); // ,
+    }
+  }
+
+  if (trailingComma) {
+    assert(false, `Unexpected token: found a trailing comma in a params list`);
+  }
+
+  expect(parser, ")", `Unexpected token: Expected ')' after the end of the params list but got: ${peek(parser).type}`);
+
+  expect(parser, "->", `Unexpected token: Expected '->' after the function parameters but got: ${peek(parser).type}`);
+
+  let typeHint = expect(
+    parser,
+    "Identifier",
+    `Unexpected token: expected a type identifier in the function declaration return type but got: ${peek(parser).type}`,
+  ).value;
+
+  expect(
+    parser,
+    ";",
+    `Unexpected token: Expected a semicolon at the end of an external function declaration but got: ${peek(parser).type}`,
+  );
+
+  return {
+    kind: "ExternalFunctionDeclaration",
+    identifier: identifierToken.value,
+    typeHint: typeHint,
+    params: params,
+    isVariadic,
+  };
+}
+
 function parseFunctionDeclaration(parser: Parser): FunctionDeclaration {
   expect(
     parser,
@@ -205,7 +297,7 @@ function parseFunctionDeclaration(parser: Parser): FunctionDeclaration {
   const identifierToken = expect(
     parser,
     "Identifier",
-    `Unexpected token: expected an identifier in a variable declaration but got: ${peek(parser).type}`,
+    `Unexpected token: expected an identifier in a function declaration but got: ${peek(parser).type}`,
   );
 
   const params = parseParamsList(parser);

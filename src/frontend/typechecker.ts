@@ -15,8 +15,18 @@ import type {
   CallExpression,
   IfStatement,
   StringLiteral,
+  ExternalFunctionDeclaration,
 } from "./ast.ts";
-import { coerceTypes, function_type, isAssignable, type Type, typeFromString, Types, typeToString } from "./types.ts";
+import {
+  coerceTypes,
+  external_function_type,
+  function_type,
+  isAssignable,
+  type Type,
+  typeFromString,
+  Types,
+  typeToString,
+} from "./types.ts";
 
 class Scope {
   public symbols = new Map<string, Type>();
@@ -88,6 +98,8 @@ const typecheckers: Record<NodeKind, (statement: Statement, context: Context) =>
   Identifier: (statement, context) => typecheckIdentifier(statement as Identifier, context),
   VariableDeclaration: (statement, context) => typecheckVariableDeclaration(statement as VariableDeclaration, context),
   FunctionDeclaration: (statement, context) => typecheckFunctionDeclaration(statement as FunctionDeclaration, context),
+  ExternalFunctionDeclaration: (statement, context) =>
+    typecheckExternalFunctionDeclaration(statement as ExternalFunctionDeclaration, context),
   BlockStatement: (statement, context) => typecheckBlockStatement(statement as BlockStatement, context),
   ReturnStatement: (statement, context) => typecheckReturnStatement(statement as ReturnStatement, context),
   CallExpression: (statement, context) => typecheckCallExpression(statement as CallExpression, context),
@@ -112,8 +124,19 @@ function typecheckProgram(program: Program, context: Context) {
         ),
       );
     }
+    if (statement.kind === "ExternalFunctionDeclaration") {
+      const externalFunctionDeclaration = statement as ExternalFunctionDeclaration;
+      context.declare(
+        externalFunctionDeclaration.identifier,
+        external_function_type(
+          externalFunctionDeclaration.params.map((param) => typeFromString(param.typeHint)),
+          typeFromString(externalFunctionDeclaration.typeHint),
+          externalFunctionDeclaration.isVariadic,
+        ),
+      );
+    }
   }
-  
+
   // Second pass -- actually type check the program
   for (const statement of program.body) {
     typecheck(statement, context);
@@ -232,6 +255,13 @@ function typecheckFunctionDeclaration(functionDeclaration: FunctionDeclaration, 
   }
 }
 
+function typecheckExternalFunctionDeclaration(
+  externalFunctionDeclaration: ExternalFunctionDeclaration,
+  context: Context,
+) {
+  // TODO: lets assume for now that external functions are always correctly defined.
+}
+
 function typecheckBlockStatement(blockStatement: BlockStatement, context: Context) {
   // TODO: this means function parameters live in a different context than the block, meaning they could be shadowed.
   context.enterScope();
@@ -248,33 +278,75 @@ function typecheckReturnStatement(returnStatement: ReturnStatement, context: Con
 
 function typecheckCallExpression(callExpression: CallExpression, context: Context) {
   typecheck(callExpression.callee, context);
-  
+
   const functionType = callExpression.callee.type!;
-  typecheckerAssert(functionType.kind === "function", `${functionType.kind} is not a function.`);
-  
-  callExpression.type = functionType.return;
 
-  typecheckerAssert(
-    functionType.params.length === callExpression.arguments.length,
-    `Expected ${functionType.params.length} arguments but got ${callExpression.arguments.length}`,
-  );
+  switch (functionType.kind) {
+    case "function": {
+      typecheckerAssert(
+        functionType.params.length === callExpression.arguments.length,
+        `Expected ${functionType.params.length} arguments but got ${callExpression.arguments.length}`,
+      );
 
-  for (let i = 0; i < functionType.params.length; ++i) {
-    typecheck(callExpression.arguments[i], context);
-    
-    const param = functionType.params[i];
-    const argument = callExpression.arguments[i].type;
+      for (let i = 0; i < functionType.params.length; ++i) {
+        typecheck(callExpression.arguments[i], context);
 
-    typecheckerAssert(
-      isAssignable(param, argument!),
-      `Cannot assign value of type ${typeToString(argument!)} to function parameter of type ${typeToString(param)}`,
-    );
+        const param = functionType.params[i];
+        const argument = callExpression.arguments[i].type;
+
+        typecheckerAssert(
+          isAssignable(param, argument!),
+          `Cannot assign value of type ${typeToString(argument!)} to function parameter of type ${typeToString(param)}`,
+        );
+      }
+      break;
+    }
+    case "external_function": {
+      if (functionType.isVariadic) {
+        typecheckerAssert(
+          callExpression.arguments.length >= functionType.params.length,
+          `Expected at least ${functionType.params.length} arguments for a variadic function but got ${callExpression.arguments.length}`,
+        );
+      } else {
+        typecheckerAssert(
+          functionType.params.length === callExpression.arguments.length,
+          `Expected ${functionType.params.length} arguments but got ${callExpression.arguments.length}`,
+        );
+
+      }
+      for (let i = 0; i < callExpression.arguments.length; ++i) {
+        typecheck(callExpression.arguments[i], context);
+
+        if (i >= functionType.params.length) {
+          continue; // We don't validate variadic arguments.
+        }
+        const param = functionType.params[i];
+        const argument = callExpression.arguments[i].type;
+
+        if (param.kind === "ptr") {
+          continue; // TODO: for now we assume we can always pass anything to ptr
+        }
+
+        typecheckerAssert(
+          isAssignable(param, argument!),
+          `Cannot assign value of type ${typeToString(argument!)} to function parameter of type ${typeToString(param)}`,
+        );
+      }
+
+      break;
+    }
+    default:
+      typecheckerAssert(false, `${functionType.kind} is not a function.`);
   }
+  callExpression.type = functionType.return;
 }
 
 function typecheckIfStatement(ifStatement: IfStatement, context: Context) {
   typecheck(ifStatement.condition, context);
-  typecheckerAssert(ifStatement.condition.type!.kind === "boolean", "The condition of an if statement must be a boolean");
+  typecheckerAssert(
+    ifStatement.condition.type!.kind === "boolean",
+    "The condition of an if statement must be a boolean",
+  );
   typecheck(ifStatement.then, context);
   ifStatement.else && typecheck(ifStatement.else, context);
 }

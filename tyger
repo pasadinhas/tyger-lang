@@ -6,6 +6,7 @@ import { lex } from "./src/frontend/lexer.ts";
 import { parse } from "./src/frontend/parser.ts";
 import { Context, typecheck } from "./src/frontend/typechecker.ts";
 import { evaluate, RuntimeScope } from "./src/interpreter/interpreter.ts";
+import { LLVMCodeGen } from './src/codegen/llvm.ts';
 import util from "util";
 
 // change default depth of objects in console.log
@@ -32,6 +33,7 @@ try {
     case "parse": console.log(parse(lex(source))); break;
     case "typecheck": console.log(typecheck(parse(lex(source)), new Context())); break;
     case "run": console.log(evaluate(typecheck(parse(lex(source)), new Context()), new RuntimeScope())); break;
+    case "llvm": console.log(new LLVMCodeGen().compile(typecheck(parse(lex(source)), new Context()))); break;
     default:
       console.error(`Error: invalid mode: ${mode}`);
       printUsage();
