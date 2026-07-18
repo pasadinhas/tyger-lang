@@ -70,7 +70,7 @@ e2e: $(TARGET)
 		expected_file=$(E2E_DIR)/$$name.expected; \
 		bin=out/tygerc_e2e_$$name; \
 		echo "--- $$name ---"; \
-		if ! ./$(TARGET) $$src -o $$bin 2>/dev/null; then \
+		if ! ./$(TARGET) compile $$src -o $$bin 2>/dev/null; then \
 			echo "  FAIL: compilation error"; failed=1; continue; \
 		fi; \
 		actual=$$($$bin 2>/dev/null); \

@@ -1,8 +1,6 @@
-node_modules/
 .DS_Store
 
 # C++ build artifacts
-tygerc/build/
-tygerc/tygerc
-tygerc/out/
+build/
+tygerc
 out/
