@@ -47,6 +47,9 @@ static void test_tk_else()        { assert_single_token("else",   TK_ELSE,      
 static void test_tk_return()      { assert_single_token("return", TK_RETURN,     NULL); }
 static void test_tk_true()        { assert_single_token("true",   TK_TRUE,       NULL); }
 static void test_tk_false()       { assert_single_token("false",  TK_FALSE,      NULL); }
+static void test_tk_while()       { assert_single_token("while",  TK_WHILE,      NULL); }
+static void test_tk_break()       { assert_single_token("break",  TK_BREAK,      NULL); }
+static void test_tk_continue()    { assert_single_token("continue", TK_CONTINUE, NULL); }
 static void test_tk_dotdotdot()   { assert_single_token("...",    TK_DOTDOTDOT,  NULL); }
 static void test_tk_arrow()       { assert_single_token("->",     TK_ARROW,      NULL); }
 static void test_tk_geq()         { assert_single_token(">=",     TK_GEQ,        NULL); }
@@ -304,6 +307,9 @@ int main(void) {
     RUN_TEST(test_tk_return);
     RUN_TEST(test_tk_true);
     RUN_TEST(test_tk_false);
+    RUN_TEST(test_tk_while);
+    RUN_TEST(test_tk_break);
+    RUN_TEST(test_tk_continue);
     RUN_TEST(test_tk_dotdotdot);
     RUN_TEST(test_tk_arrow);
     RUN_TEST(test_tk_geq);

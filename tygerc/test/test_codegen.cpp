@@ -173,6 +173,50 @@ static void test_multiple_functions() {
     ));
 }
 
+static void test_while_loop() {
+    ASSERT(compile_and_run(
+        "extern fn printf(fmt: ptr, ...) -> i32;\n"
+        "fn main() -> i32 {\n"
+        "  let mut n = 3;\n"
+        "  while n > 0 {\n"
+        "    printf(\"%lld\\n\", n);\n"
+        "    n = n - 1;\n"
+        "  }\n"
+        "}\n",
+        "3\n2\n1\n"
+    ));
+}
+
+static void test_while_break() {
+    ASSERT(compile_and_run(
+        "extern fn printf(fmt: ptr, ...) -> i32;\n"
+        "fn main() -> i32 {\n"
+        "  let mut n = 5;\n"
+        "  while n > 0 {\n"
+        "    if n == 3 break;\n"
+        "    printf(\"%lld\\n\", n);\n"
+        "    n = n - 1;\n"
+        "  }\n"
+        "}\n",
+        "5\n4\n"
+    ));
+}
+
+static void test_while_continue() {
+    ASSERT(compile_and_run(
+        "extern fn printf(fmt: ptr, ...) -> i32;\n"
+        "fn main() -> i32 {\n"
+        "  let mut n = 5;\n"
+        "  while n > 0 {\n"
+        "    n = n - 1;\n"
+        "    if n == 3 continue;\n"
+        "    printf(\"%lld\\n\", n);\n"
+        "  }\n"
+        "}\n",
+        "4\n2\n1\n0\n"
+    ));
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -187,6 +231,11 @@ int main(void) {
     RUN_TEST(test_variable_and_assignment);
     RUN_TEST(test_if_else);
     RUN_TEST(test_multiple_functions);
+
+    printf("\n=== While loop tests ===\n");
+    RUN_TEST(test_while_loop);
+    RUN_TEST(test_while_break);
+    RUN_TEST(test_while_continue);
 
     arena_free(&g_arena);
     return TEST_RESULTS();

@@ -33,6 +33,11 @@
 // Codegen state
 // ---------------------------------------------------------------------------
 
+struct LoopContext {
+    llvm::BasicBlock *header; // continue jumps here
+    llvm::BasicBlock *exit;   // break jumps here
+};
+
 struct Codegen {
     llvm::LLVMContext               ctx;
     llvm::Module                    mod;
@@ -40,9 +45,8 @@ struct Codegen {
     Arena                          *arena;
     char                            errbuf[512];
 
-    // Maps variable name (as null-terminated C string) to its alloca.
-    // Cleared on each function entry.
     std::map<std::string, llvm::AllocaInst *> locals;
+    std::vector<LoopContext>                  loop_stack; // for break/continue
 
     Codegen(const char *module_name, Arena *a)
         : ctx(), mod(module_name, ctx), builder(ctx), arena(a) {
@@ -394,12 +398,69 @@ static llvm::Value *gen_call_expr(Codegen &cg, AstCallExpr *node) {
     return call;
 }
 
+static llvm::Value *gen_while(Codegen &cg, AstWhile *node) {
+    llvm::Function *fn = cg.builder.GetInsertBlock()->getParent();
+
+    llvm::BasicBlock *header_bb = llvm::BasicBlock::Create(cg.ctx, "while.header", fn);
+    llvm::BasicBlock *body_bb   = llvm::BasicBlock::Create(cg.ctx, "while.body");
+    llvm::BasicBlock *exit_bb   = llvm::BasicBlock::Create(cg.ctx, "while.exit");
+
+    // Push loop context so break/continue know where to jump
+    cg.loop_stack.push_back({header_bb, exit_bb});
+
+    // Fall into the header
+    cg.builder.CreateBr(header_bb);
+
+    // Header: evaluate condition
+    cg.builder.SetInsertPoint(header_bb);
+    llvm::Value *cond = gen_node(cg, node->cond);
+    if (!cond) return nullptr;
+    if (!cond->getType()->isIntegerTy(1)) {
+        cond = cg.builder.CreateICmpNE(
+            cond, llvm::Constant::getNullValue(cond->getType()), "while.cond");
+    }
+    cg.builder.CreateCondBr(cond, body_bb, exit_bb);
+
+    // Body
+    fn->insert(fn->end(), body_bb);
+    cg.builder.SetInsertPoint(body_bb);
+    gen_node(cg, node->body);
+    // If body didn't terminate (no break/return), loop back to header
+    if (!cg.builder.GetInsertBlock()->getTerminator())
+        cg.builder.CreateBr(header_bb);
+
+    // Exit
+    fn->insert(fn->end(), exit_bb);
+    cg.builder.SetInsertPoint(exit_bb);
+
+    cg.loop_stack.pop_back();
+    return nullptr;
+}
+
+static llvm::Value *gen_break(Codegen &cg, Node * /*node*/) {
+    if (cg.loop_stack.empty()) {
+        snprintf(cg.errbuf, sizeof(cg.errbuf), "codegen: break outside of loop");
+        return nullptr;
+    }
+    cg.builder.CreateBr(cg.loop_stack.back().exit);
+    return nullptr;
+}
+
+static llvm::Value *gen_continue(Codegen &cg, Node * /*node*/) {
+    if (cg.loop_stack.empty()) {
+        snprintf(cg.errbuf, sizeof(cg.errbuf), "codegen: continue outside of loop");
+        return nullptr;
+    }
+    cg.builder.CreateBr(cg.loop_stack.back().header);
+    return nullptr;
+}
+
 // ---------------------------------------------------------------------------
 // Main dispatch
 // ---------------------------------------------------------------------------
 
 static llvm::Value *gen_node(Codegen &cg, Node *node) {
-    static_assert(NK_COUNT == 14, "gen_node: NodeKind changed, update this switch");
+    static_assert(NK_COUNT == 17, "gen_node: NodeKind changed, update this switch");
 
     if (!node) return nullptr;
 
@@ -418,6 +479,9 @@ static llvm::Value *gen_node(Codegen &cg, Node *node) {
         case NK_BLOCK:                return gen_block(cg, (AstBlock *)node);
         case NK_RETURN:               return gen_return(cg, (AstReturn *)node);
         case NK_IF:                   return gen_if(cg, (AstIf *)node);
+        case NK_WHILE:                return gen_while(cg, (AstWhile *)node);
+        case NK_BREAK:                return gen_break(cg, node);
+        case NK_CONTINUE:             return gen_continue(cg, node);
         case NK_IDENTIFIER:           return gen_identifier(cg, (AstIdentifier *)node);
         case NK_NUMERIC_LITERAL:      return gen_numeric_literal(cg, (AstNumericLiteral *)node);
         case NK_STRING_LITERAL:       return gen_string_literal(cg, (AstStringLiteral *)node);

@@ -31,8 +31,9 @@ typedef DA(Type *) ReturnTypeStack;
 // ---------------------------------------------------------------------------
 
 typedef struct {
-    ScopeStack      scopes;       // stack of scopes; scopes.data[0] is global
-    ReturnTypeStack return_types; // stack of expected return types (one per function)
+    ScopeStack      scopes;
+    ReturnTypeStack return_types;
+    int             loop_depth;  // incremented inside each while loop
     Arena          *arena;
     char            errbuf[512];
 } Context;

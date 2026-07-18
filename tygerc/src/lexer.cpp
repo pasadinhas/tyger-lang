@@ -9,7 +9,7 @@
 
 const char *token_type_name(TokenType type) {
     // If TK_COUNT changes, update this switch.
-    static_assert(TK_COUNT == 39, "token_type_name: token list changed, update this switch");
+    static_assert(TK_COUNT == 42, "token_type_name: token list changed, update this switch");
     switch (type) {
         case TK_LET:         return "let";
         case TK_MUT:         return "mut";
@@ -20,6 +20,9 @@ const char *token_type_name(TokenType type) {
         case TK_RETURN:      return "return";
         case TK_TRUE:        return "true";
         case TK_FALSE:       return "false";
+        case TK_WHILE:       return "while";
+        case TK_BREAK:       return "break";
+        case TK_CONTINUE:    return "continue";
         case TK_DOTDOTDOT:   return "...";
         case TK_ARROW:       return "->";
         case TK_GEQ:         return ">=";
@@ -246,7 +249,7 @@ LexResult lex(SV source, Arena *arena) {
         }
 
         // If TK_COUNT changes, update the matcher chain below.
-        static_assert(TK_COUNT == 39, "lex: token list changed, update the matcher chain");
+        static_assert(TK_COUNT == 42, "lex: token list changed, update the matcher chain");
 
         Loc tok_loc = current_loc(&l);
         Token tok;
@@ -255,16 +258,19 @@ LexResult lex(SV source, Arena *arena) {
         tok.loc   = tok_loc;
         bool matched = false;
 
-        // Keywords (must be tried before identifiers)
-        if      (try_keyword(&l, "extern", 6, TK_EXTERN, &tok)) matched = true;
-        else if (try_keyword(&l, "return", 6, TK_RETURN, &tok)) matched = true;
-        else if (try_keyword(&l, "false",  5, TK_FALSE,  &tok)) matched = true;
-        else if (try_keyword(&l, "true",   4, TK_TRUE,   &tok)) matched = true;
-        else if (try_keyword(&l, "else",   4, TK_ELSE,   &tok)) matched = true;
-        else if (try_keyword(&l, "let",    3, TK_LET,    &tok)) matched = true;
-        else if (try_keyword(&l, "mut",    3, TK_MUT,    &tok)) matched = true;
-        else if (try_keyword(&l, "fn",     2, TK_FN,     &tok)) matched = true;
-        else if (try_keyword(&l, "if",     2, TK_IF,     &tok)) matched = true;
+        // Keywords (must be tried before identifiers, longer keywords first)
+        if      (try_keyword(&l, "continue", 8, TK_CONTINUE, &tok)) matched = true;
+        else if (try_keyword(&l, "extern",   6, TK_EXTERN,   &tok)) matched = true;
+        else if (try_keyword(&l, "return",   6, TK_RETURN,   &tok)) matched = true;
+        else if (try_keyword(&l, "false",    5, TK_FALSE,    &tok)) matched = true;
+        else if (try_keyword(&l, "break",    5, TK_BREAK,    &tok)) matched = true;
+        else if (try_keyword(&l, "while",    5, TK_WHILE,    &tok)) matched = true;
+        else if (try_keyword(&l, "true",     4, TK_TRUE,     &tok)) matched = true;
+        else if (try_keyword(&l, "else",     4, TK_ELSE,     &tok)) matched = true;
+        else if (try_keyword(&l, "let",      3, TK_LET,      &tok)) matched = true;
+        else if (try_keyword(&l, "mut",      3, TK_MUT,      &tok)) matched = true;
+        else if (try_keyword(&l, "fn",       2, TK_FN,       &tok)) matched = true;
+        else if (try_keyword(&l, "if",       2, TK_IF,       &tok)) matched = true;
 
         // Multi-char operators (longer matches first)
         else if (try_exact(&l, "...", 3, TK_DOTDOTDOT,  &tok)) matched = true;

@@ -256,6 +256,35 @@ static Node *parse_expression_stmt(Parser *p) {
     return expr;
 }
 
+// while <cond> <block>
+static Node *parse_while(Parser *p) {
+    Token *while_tok = parser_eat(p); // while
+
+    AstWhile *node = ast_alloc(p->arena, AstWhile, NK_WHILE, while_tok->loc);
+
+    node->cond = parse_expression(p);
+    if (!node->cond) return NULL;
+
+    node->body = parse_block(p);
+    if (!node->body) return NULL;
+
+    return (Node *)node;
+}
+
+// break;
+static Node *parse_break(Parser *p) {
+    Token *tok = parser_eat(p); // break
+    if (!parser_expect(p, TK_SEMICOLON, "expected ';' after break")) return NULL;
+    return ast_alloc(p->arena, Node, NK_BREAK, tok->loc);
+}
+
+// continue;
+static Node *parse_continue(Parser *p) {
+    Token *tok = parser_eat(p); // continue
+    if (!parser_expect(p, TK_SEMICOLON, "expected ';' after continue")) return NULL;
+    return ast_alloc(p->arena, Node, NK_CONTINUE, tok->loc);
+}
+
 static Node *parse_statement(Parser *p) {
     switch (parser_peek(p, 0)->type) {
         case TK_EXTERN: return parse_extern_function_decl(p);
@@ -263,6 +292,9 @@ static Node *parse_statement(Parser *p) {
         case TK_LET:    return parse_var_decl(p);
         case TK_RETURN: return parse_return(p);
         case TK_IF:     return parse_if(p);
+        case TK_WHILE:  return parse_while(p);
+        case TK_BREAK:  return parse_break(p);
+        case TK_CONTINUE: return parse_continue(p);
         case TK_LBRACE: return parse_block(p);
         default:        return parse_expression_stmt(p);
     }

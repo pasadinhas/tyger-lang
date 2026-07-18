@@ -22,6 +22,11 @@ typedef enum {
     NK_RETURN,
     NK_IF,
 
+    // Loops
+    NK_WHILE,
+    NK_BREAK,
+    NK_CONTINUE,
+
     // Expressions
     NK_IDENTIFIER,
     NK_NUMERIC_LITERAL,
@@ -127,6 +132,15 @@ typedef struct {
     Node *then;
     Node *else_; // NULL if no else branch
 } AstIf;
+
+// while <cond> <body>
+typedef struct {
+    NODE_HEADER;
+    Node *cond;
+    Node *body; // always NK_BLOCK
+} AstWhile;
+
+// break; and continue; — no extra fields beyond the header
 
 // <name>
 typedef struct {

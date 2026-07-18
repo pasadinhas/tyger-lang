@@ -1,0 +1,11 @@
+extern fn printf(fmt: ptr, ...) -> i32;
+
+fn main() -> i32 {
+  let mut n = 10;
+  while n > 0 {
+    if n == 8 { n = n - 1; continue; }
+    if n == 1 break;
+    printf("%lld\n", n);
+    n = n - 1;
+  }
+}

@@ -28,6 +28,9 @@ typedef enum {
     TK_RETURN,
     TK_TRUE,
     TK_FALSE,
+    TK_WHILE,
+    TK_BREAK,
+    TK_CONTINUE,
 
     // Multi-char operators / punctuation
     TK_DOTDOTDOT,  // ...

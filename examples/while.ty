@@ -1,0 +1,12 @@
+extern fn printf(format: ptr, ...) -> i32;
+
+fn main() -> i32 {
+  let n = 10;
+  while n > 0 {
+    n = n - 1;
+    if n == 8 continue;
+    if n == 2 break;
+    printf("n = %d\n", n);
+  }
+}
+

@@ -144,6 +144,30 @@ static void test_node_type_annotated() {
     ASSERT(decl->init->type == TY_I64);
 }
 
+static void test_while_loop() {
+    ASSERT(tc_ok(
+        "fn f() -> i64 {\n"
+        "  let mut n = 10;\n"
+        "  while n > 0 { n = n - 1; }\n"
+        "  return n;\n"
+        "}\n"
+    ));
+}
+
+static void test_while_with_break_continue() {
+    ASSERT(tc_ok(
+        "fn f() -> i64 {\n"
+        "  let mut n = 10;\n"
+        "  while n > 0 {\n"
+        "    if n == 5 break;\n"
+        "    if n == 8 continue;\n"
+        "    n = n - 1;\n"
+        "  }\n"
+        "  return n;\n"
+        "}\n"
+    ));
+}
+
 // ---------------------------------------------------------------------------
 // Error cases — must fail typechecking
 // ---------------------------------------------------------------------------
@@ -200,6 +224,18 @@ static void test_error_unknown_type() {
     ASSERT(tc_fails("let x: Banana = 1;"));
 }
 
+static void test_error_while_non_boolean_condition() {
+    ASSERT(tc_fails("fn f() -> i64 { while 1 { } }"));
+}
+
+static void test_error_break_outside_loop() {
+    ASSERT(tc_fails("fn f() -> i64 { break; }"));
+}
+
+static void test_error_continue_outside_loop() {
+    ASSERT(tc_fails("fn f() -> i64 { continue; }"));
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -223,6 +259,10 @@ int main(void) {
     RUN_TEST(test_assignment);
     RUN_TEST(test_mutual_recursion);
 
+    printf("\n=== While loop ===\n");
+    RUN_TEST(test_while_loop);
+    RUN_TEST(test_while_with_break_continue);
+
     printf("\n=== Type annotation ===\n");
     RUN_TEST(test_node_type_annotated);
 
@@ -237,6 +277,9 @@ int main(void) {
     RUN_TEST(test_error_call_non_function);
     RUN_TEST(test_error_arithmetic_on_bool);
     RUN_TEST(test_error_unknown_type);
+    RUN_TEST(test_error_while_non_boolean_condition);
+    RUN_TEST(test_error_break_outside_loop);
+    RUN_TEST(test_error_continue_outside_loop);
 
     arena_free(&g_arena);
     return TEST_RESULTS();

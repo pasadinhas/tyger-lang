@@ -9,6 +9,7 @@
 void context_init(Context *ctx, Arena *arena) {
     ctx->scopes.data      = NULL; ctx->scopes.len      = 0; ctx->scopes.cap      = 0;
     ctx->return_types.data = NULL; ctx->return_types.len = 0; ctx->return_types.cap = 0;
+    ctx->loop_depth = 0;
     ctx->arena    = arena;
     ctx->errbuf[0] = '\0';
 
@@ -97,7 +98,7 @@ static bool tc_node(Node *node, Context *ctx);
 // ---------------------------------------------------------------------------
 
 static bool tc_program(AstProgram *node, Context *ctx) {
-    static_assert(NK_COUNT == 14, "tc_program: NodeKind changed");
+    static_assert(NK_COUNT == 17, "tc_program: NodeKind changed");
 
     // First pass: hoist function and extern function declarations
     for (size_t i = 0; i < node->body.len; i++) {
@@ -250,6 +251,32 @@ static bool tc_if(AstIf *node, Context *ctx) {
 
     if (!tc_node(node->then, ctx)) return false;
     if (node->else_ && !tc_node(node->else_, ctx)) return false;
+    return true;
+}
+
+static bool tc_while(AstWhile *node, Context *ctx) {
+    if (!tc_node(node->cond, ctx)) return false;
+
+    if (node->cond->type != TY_BOOL_SINGLETON)
+        TC_ERR(ctx, node->cond->loc,
+               "while condition must be boolean, got '%s'",
+               type_to_string(node->cond->type, ctx->arena));
+
+    ctx->loop_depth++;
+    bool ok = tc_node(node->body, ctx);
+    ctx->loop_depth--;
+    return ok;
+}
+
+static bool tc_break(Node *node, Context *ctx) {
+    if (ctx->loop_depth == 0)
+        TC_ERR(ctx, node->loc, "break outside of a loop");
+    return true;
+}
+
+static bool tc_continue(Node *node, Context *ctx) {
+    if (ctx->loop_depth == 0)
+        TC_ERR(ctx, node->loc, "continue outside of a loop");
     return true;
 }
 
@@ -409,7 +436,7 @@ static bool tc_call_expr(AstCallExpr *node, Context *ctx) {
 // ---------------------------------------------------------------------------
 
 static bool tc_node(Node *node, Context *ctx) {
-    static_assert(NK_COUNT == 14, "tc_node: NodeKind changed, update this switch");
+    static_assert(NK_COUNT == 17, "tc_node: NodeKind changed, update this switch");
 
     if (!node) {
         snprintf(ctx->errbuf, sizeof(ctx->errbuf), "internal: NULL node passed to tc_node");
@@ -424,6 +451,9 @@ static bool tc_node(Node *node, Context *ctx) {
         case NK_BLOCK:                return tc_block((AstBlock *)node, ctx);
         case NK_RETURN:               return tc_return((AstReturn *)node, ctx);
         case NK_IF:                   return tc_if((AstIf *)node, ctx);
+        case NK_WHILE:                return tc_while((AstWhile *)node, ctx);
+        case NK_BREAK:                return tc_break(node, ctx);
+        case NK_CONTINUE:             return tc_continue(node, ctx);
         case NK_IDENTIFIER:           return tc_identifier((AstIdentifier *)node, ctx);
         case NK_NUMERIC_LITERAL:      return tc_numeric_literal((AstNumericLiteral *)node, ctx);
         case NK_STRING_LITERAL:       return tc_string_literal((AstStringLiteral *)node, ctx);

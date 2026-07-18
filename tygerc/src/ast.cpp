@@ -4,7 +4,7 @@
 #include <cstring>
 
 const char *node_kind_name(NodeKind kind) {
-    static_assert(NK_COUNT == 14, "node_kind_name: NodeKind changed, update this switch");
+    static_assert(NK_COUNT == 17, "node_kind_name: NodeKind changed, update this switch");
     switch (kind) {
         case NK_PROGRAM:              return "Program";
         case NK_VAR_DECL:             return "VarDecl";
@@ -13,6 +13,9 @@ const char *node_kind_name(NodeKind kind) {
         case NK_BLOCK:                return "Block";
         case NK_RETURN:               return "Return";
         case NK_IF:                   return "If";
+        case NK_WHILE:                return "While";
+        case NK_BREAK:                return "Break";
+        case NK_CONTINUE:             return "Continue";
         case NK_IDENTIFIER:           return "Identifier";
         case NK_NUMERIC_LITERAL:      return "NumericLiteral";
         case NK_STRING_LITERAL:       return "StringLiteral";
@@ -63,7 +66,7 @@ static void node_to_str(const Node *node, char *buf, int buf_size, int *pos, int
         return;
     }
 
-    static_assert(NK_COUNT == 14, "node_to_str: NodeKind changed, update this switch");
+    static_assert(NK_COUNT == 17, "node_to_str: NodeKind changed, update this switch");
 
     write_indent(buf, buf_size, pos, indent);
 
@@ -125,6 +128,23 @@ static void node_to_str(const Node *node, char *buf, int buf_size, int *pos, int
             }
             break;
         }
+        case NK_WHILE: {
+            AstWhile *n = (AstWhile *)node;
+            write_fmt(buf, buf_size, pos, "While\n");
+            write_indent(buf, buf_size, pos, indent + 1);
+            write_fmt(buf, buf_size, pos, "cond:\n");
+            node_to_str(n->cond, buf, buf_size, pos, indent + 2);
+            write_indent(buf, buf_size, pos, indent + 1);
+            write_fmt(buf, buf_size, pos, "body:\n");
+            node_to_str(n->body, buf, buf_size, pos, indent + 2);
+            break;
+        }
+        case NK_BREAK:
+            write_fmt(buf, buf_size, pos, "Break\n");
+            break;
+        case NK_CONTINUE:
+            write_fmt(buf, buf_size, pos, "Continue\n");
+            break;
         case NK_IDENTIFIER: {
             AstIdentifier *n = (AstIdentifier *)node;
             write_fmt(buf, buf_size, pos, "Identifier(" SV_FMT ")\n", SV_ARG(n->name));

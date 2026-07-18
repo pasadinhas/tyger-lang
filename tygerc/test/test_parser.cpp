@@ -323,6 +323,51 @@ static void test_factorial_example() {
 }
 
 // ---------------------------------------------------------------------------
+// While / break / continue
+// ---------------------------------------------------------------------------
+
+static void test_while_basic() {
+    AstProgram *p = must_parse("fn f() -> i64 { while x < 10 { x = x + 1; } }");
+    ASSERT_NOT_NULL(p);
+    AstFunctionDecl *fn = (AstFunctionDecl *)p->body.data[0];
+    AstBlock *body = (AstBlock *)fn->body;
+    AstWhile *w = (AstWhile *)body->body.data[0];
+    ASSERT_EQ(NK_WHILE, w->kind);
+    ASSERT_NOT_NULL(w->cond);
+    ASSERT_EQ(NK_BINARY_EXPR, w->cond->kind);
+    ASSERT_NOT_NULL(w->body);
+    ASSERT_EQ(NK_BLOCK, w->body->kind);
+}
+
+static void test_while_with_break() {
+    AstProgram *p = must_parse("fn f() -> i64 { while true { break; } }");
+    ASSERT_NOT_NULL(p);
+    AstFunctionDecl *fn = (AstFunctionDecl *)p->body.data[0];
+    AstBlock *body = (AstBlock *)fn->body;
+    AstWhile *w = (AstWhile *)body->body.data[0];
+    AstBlock *wb = (AstBlock *)w->body;
+    ASSERT_EQ(NK_BREAK, wb->body.data[0]->kind);
+}
+
+static void test_while_with_continue() {
+    AstProgram *p = must_parse("fn f() -> i64 { while true { continue; } }");
+    ASSERT_NOT_NULL(p);
+    AstFunctionDecl *fn = (AstFunctionDecl *)p->body.data[0];
+    AstBlock *body = (AstBlock *)fn->body;
+    AstWhile *w = (AstWhile *)body->body.data[0];
+    AstBlock *wb = (AstBlock *)w->body;
+    ASSERT_EQ(NK_CONTINUE, wb->body.data[0]->kind);
+}
+
+static void test_while_loc() {
+    AstProgram *p = must_parse("fn f() -> i64 { while true { } }");
+    ASSERT_NOT_NULL(p);
+    AstFunctionDecl *fn = (AstFunctionDecl *)p->body.data[0];
+    AstBlock *body = (AstBlock *)fn->body;
+    ASSERT_EQ(1u, body->body.data[0]->loc.line);
+}
+
+// ---------------------------------------------------------------------------
 // Source locations
 // ---------------------------------------------------------------------------
 
@@ -431,6 +476,12 @@ int main(void) {
 
     printf("\n=== Full example ===\n");
     RUN_TEST(test_factorial_example);
+
+    printf("\n=== While / break / continue ===\n");
+    RUN_TEST(test_while_basic);
+    RUN_TEST(test_while_with_break);
+    RUN_TEST(test_while_with_continue);
+    RUN_TEST(test_while_loc);
 
     printf("\n=== Source locations ===\n");
     RUN_TEST(test_loc_on_function_decl);
