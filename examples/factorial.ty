@@ -5,6 +5,15 @@ fn factorial(n: i64) -> i64 {
   else return n * factorial(n - 1);
 }
 
-fn main() -> i32 {
-  printf("factorial(5) = %d\n", factorial(5));
+fn fib(n: i64) -> i64 {
+  // return if n <= 1 n else fib(n - 1) + fib(n - 2);
+  if n <= 1 return n;
+  return fib(n - 1) + fib(n - 2);
 }
+
+fn main() -> i32 {
+  let n = 10;
+  printf("factorial(%d) = %d\n", n, factorial(n));
+  printf("fib(%d) = %d\n", n, fib(n));
+}
+

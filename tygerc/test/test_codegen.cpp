@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <sys/stat.h>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,8 +42,10 @@ static bool compile_and_run(const char *src, const char *expected_output) {
     }
 
     // 4. Codegen → .ll file
-    const char *ll_path  = "/tmp/tyger_test.ll";
-    const char *bin_path = "/tmp/tyger_test_bin";
+    // Ensure out/ exists (tests run from tygerc/ directory)
+    mkdir("out", 0755);
+    const char *ll_path  = "out/tyger_test.ll";
+    const char *bin_path = "out/tyger_test_bin";
 
     CodegenResult cr = codegen(pr.program, ll_path, &g_arena);
     if (cr.error) {
@@ -53,14 +56,14 @@ static bool compile_and_run(const char *src, const char *expected_output) {
     // 5. Compile .ll → binary using clang
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
-             "/opt/homebrew/opt/llvm/bin/clang %s -o %s 2>/tmp/tyger_clang_err.txt",
+             "clang %s -o %s 2>out/tyger_clang_err.txt",
              ll_path, bin_path);
     if (system(cmd) != 0) {
         fprintf(stderr, "  clang compilation failed. IR:\n");
         FILE *f = fopen(ll_path, "r");
         if (f) { char line[256]; while (fgets(line, sizeof(line), f)) fprintf(stderr, "    %s", line); fclose(f); }
         fprintf(stderr, "  clang stderr:\n");
-        f = fopen("/tmp/tyger_clang_err.txt", "r");
+        f = fopen("out/tyger_clang_err.txt", "r");
         if (f) { char line[256]; while (fgets(line, sizeof(line), f)) fprintf(stderr, "    %s", line); fclose(f); }
         return false;
     }

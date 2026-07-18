@@ -21,7 +21,6 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/TargetParser/Host.h>
-#include <llvm/TargetParser/Triple.h>
 
 #pragma clang diagnostic pop
 
@@ -444,8 +443,8 @@ CodegenResult codegen(AstProgram *program, const char *out_path, Arena *arena) {
 
     Codegen cg("tyger_module", arena);
 
-    // Set target triple to the current machine
-    cg.mod.setTargetTriple(llvm::Triple(llvm::sys::getDefaultTargetTriple()));
+    // Let clang determine the target triple when compiling the .ll file.
+    // Embedding a triple here causes version mismatch warnings on newer OS.
 
     gen_node(cg, (Node *)program);
 

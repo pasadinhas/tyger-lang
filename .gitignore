@@ -4,3 +4,4 @@ node_modules/
 # C++ build artifacts
 tygerc/build/
 tygerc/tygerc
+tygerc/out/

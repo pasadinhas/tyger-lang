@@ -1,0 +1,5 @@
+extern fn printf(fmt: ptr, ...) -> i32;
+
+fn main() -> i32 {
+  printf("%d\n", 42);
+}
