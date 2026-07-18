@@ -72,7 +72,10 @@ static void test_to_string_function() {
     TypeList params = {0};
     da_push(&params, TY_I64);
     da_push(&params, TY_I64);
-    Type *fn = make_function_type(&g_arena, params, TY_I64);
+    BoolList mut_params = {0};
+    da_push(&mut_params, false);
+    da_push(&mut_params, false);
+    Type *fn = make_function_type(&g_arena, params, mut_params, TY_I64);
     ASSERT_STR_EQ("(i64, i64) -> i64", type_to_string(fn, &g_arena));
 }
 
@@ -197,6 +200,61 @@ static void test_assignable_incompatible() {
 }
 
 // ---------------------------------------------------------------------------
+// TY_STRUCT
+// ---------------------------------------------------------------------------
+
+static void test_struct_type_to_string() {
+    Arena a = {0};
+    arena_init(&a, 0);
+
+    StructTypeFieldList fields = {0};
+    StructTypeField fx; fx.name = sv_from_cstr("x"); fx.type = TY_F32;
+    StructTypeField fy; fy.name = sv_from_cstr("y"); fy.type = TY_F32;
+    da_push(&fields, fx);
+    da_push(&fields, fy);
+
+    Type *point = make_struct_type(&a, sv_from_cstr("Point"), fields);
+    ASSERT_STR_EQ("Point", type_to_string(point, &a));
+
+    arena_free(&a);
+}
+
+static void test_struct_types_equal_nominal() {
+    Arena a = {0};
+    arena_init(&a, 0);
+
+    StructTypeFieldList f1 = {0}, f2 = {0};
+    Type *point1 = make_struct_type(&a, sv_from_cstr("Point"), f1);
+    Type *point2 = make_struct_type(&a, sv_from_cstr("Point"), f2);
+    Type *vec    = make_struct_type(&a, sv_from_cstr("Vec"),   f2);
+
+    // Same name → equal (nominal typing)
+    ASSERT(types_equal(point1, point2));
+    // Different name → not equal
+    ASSERT(!types_equal(point1, vec));
+
+    arena_free(&a);
+}
+
+static void test_struct_field_index() {
+    Arena a = {0};
+    arena_init(&a, 0);
+
+    StructTypeFieldList fields = {0};
+    StructTypeField fx; fx.name = sv_from_cstr("x"); fx.type = TY_F32;
+    StructTypeField fy; fy.name = sv_from_cstr("y"); fy.type = TY_F32;
+    da_push(&fields, fx);
+    da_push(&fields, fy);
+
+    Type *point = make_struct_type(&a, sv_from_cstr("Point"), fields);
+    ASSERT_EQ(0, struct_field_index(point, sv_from_cstr("x")));
+    ASSERT_EQ(1, struct_field_index(point, sv_from_cstr("y")));
+    ASSERT_EQ(-1, struct_field_index(point, sv_from_cstr("z")));
+
+    arena_free(&a);
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -241,6 +299,11 @@ int main(void) {
     RUN_TEST(test_assignable_float_receives_int);
     RUN_TEST(test_assignable_signed_to_wider_signed);
     RUN_TEST(test_assignable_incompatible);
+
+    printf("\n=== TY_STRUCT ===\n");
+    RUN_TEST(test_struct_type_to_string);
+    RUN_TEST(test_struct_types_equal_nominal);
+    RUN_TEST(test_struct_field_index);
 
     arena_free(&g_arena);
     return TEST_RESULTS();

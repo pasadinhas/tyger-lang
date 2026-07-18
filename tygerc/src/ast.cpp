@@ -4,7 +4,7 @@
 #include <cstring>
 
 const char *node_kind_name(NodeKind kind) {
-    static_assert(NK_COUNT == 17, "node_kind_name: NodeKind changed, update this switch");
+    static_assert(NK_COUNT == 20, "node_kind_name: NodeKind changed, update this switch");
     switch (kind) {
         case NK_PROGRAM:              return "Program";
         case NK_VAR_DECL:             return "VarDecl";
@@ -16,6 +16,9 @@ const char *node_kind_name(NodeKind kind) {
         case NK_WHILE:                return "While";
         case NK_BREAK:                return "Break";
         case NK_CONTINUE:             return "Continue";
+        case NK_STRUCT_DECL:          return "StructDecl";
+        case NK_STRUCT_LITERAL:       return "StructLiteral";
+        case NK_FIELD_ACCESS:         return "FieldAccess";
         case NK_IDENTIFIER:           return "Identifier";
         case NK_NUMERIC_LITERAL:      return "NumericLiteral";
         case NK_STRING_LITERAL:       return "StringLiteral";
@@ -66,7 +69,7 @@ static void node_to_str(const Node *node, char *buf, int buf_size, int *pos, int
         return;
     }
 
-    static_assert(NK_COUNT == 17, "node_to_str: NodeKind changed, update this switch");
+    static_assert(NK_COUNT == 20, "node_to_str: NodeKind changed, update this switch");
 
     write_indent(buf, buf_size, pos, indent);
 
@@ -145,6 +148,35 @@ static void node_to_str(const Node *node, char *buf, int buf_size, int *pos, int
         case NK_CONTINUE:
             write_fmt(buf, buf_size, pos, "Continue\n");
             break;
+        case NK_STRUCT_DECL: {
+            AstStructDecl *n = (AstStructDecl *)node;
+            write_fmt(buf, buf_size, pos, "StructDecl(" SV_FMT ") [%zu fields]\n",
+                      SV_ARG(n->name), n->fields.len);
+            for (size_t i = 0; i < n->fields.len; i++) {
+                write_indent(buf, buf_size, pos, indent + 1);
+                write_fmt(buf, buf_size, pos, SV_FMT ": " SV_FMT "\n",
+                          SV_ARG(n->fields.data[i].name),
+                          SV_ARG(n->fields.data[i].type_name));
+            }
+            break;
+        }
+        case NK_STRUCT_LITERAL: {
+            AstStructLiteral *n = (AstStructLiteral *)node;
+            write_fmt(buf, buf_size, pos, "StructLiteral(" SV_FMT ") [%zu fields]\n",
+                      SV_ARG(n->struct_name), n->fields.len);
+            for (size_t i = 0; i < n->fields.len; i++) {
+                write_indent(buf, buf_size, pos, indent + 1);
+                write_fmt(buf, buf_size, pos, SV_FMT " =\n", SV_ARG(n->fields.data[i].name));
+                node_to_str(n->fields.data[i].value, buf, buf_size, pos, indent + 2);
+            }
+            break;
+        }
+        case NK_FIELD_ACCESS: {
+            AstFieldAccess *n = (AstFieldAccess *)node;
+            write_fmt(buf, buf_size, pos, "FieldAccess(." SV_FMT ")\n", SV_ARG(n->field));
+            node_to_str(n->object, buf, buf_size, pos, indent + 1);
+            break;
+        }
         case NK_IDENTIFIER: {
             AstIdentifier *n = (AstIdentifier *)node;
             write_fmt(buf, buf_size, pos, "Identifier(" SV_FMT ")\n", SV_ARG(n->name));
@@ -152,7 +184,7 @@ static void node_to_str(const Node *node, char *buf, int buf_size, int *pos, int
         }
         case NK_NUMERIC_LITERAL: {
             AstNumericLiteral *n = (AstNumericLiteral *)node;
-            write_fmt(buf, buf_size, pos, "NumericLiteral(%lld)\n", (long long)n->value);
+            write_fmt(buf, buf_size, pos, "NumericLiteral(%g)\n", n->value);
             break;
         }
         case NK_STRING_LITERAL: {

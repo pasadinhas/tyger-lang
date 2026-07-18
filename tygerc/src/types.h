@@ -18,6 +18,7 @@ typedef enum {
     TY_PTR,
     TY_FUNCTION,
     TY_EXT_FUNCTION,
+    TY_STRUCT,
 
     TY_COUNT, // must remain last
 } TypeKind;
@@ -29,19 +30,29 @@ const char *type_kind_name(TypeKind kind);
 // ---------------------------------------------------------------------------
 
 typedef DA(struct Type *) TypeList;
+typedef DA(bool) BoolList;
+
+// A single field in a struct type
+typedef struct {
+    SV             name;
+    struct Type   *type;
+} StructTypeField;
+
+typedef DA(StructTypeField) StructTypeFieldList;
 
 typedef struct Type {
     TypeKind kind;
     union {
         struct {
             bool    signed_;
-            uint8_t bits;    // 8, 16, 32, 64, 128
+            uint8_t bits;
         } integer;
         struct {
-            uint8_t bits;    // 32, 64
+            uint8_t bits;
         } floating;
         struct {
-            TypeList  params;
+            TypeList     params;
+            BoolList     mut_params; // parallel to params: true if that param is mut
             struct Type *ret;
         } function;
         struct {
@@ -49,7 +60,10 @@ typedef struct Type {
             struct Type *ret;
             bool      variadic;
         } ext_function;
-        // TY_BOOL, TY_STRING, TY_PTR have no extra data
+        struct {
+            SV                  name;
+            StructTypeFieldList fields;
+        } struct_;
     };
 } Type;
 
@@ -104,7 +118,16 @@ Type *coerce_types(Type *left, Type *right);
 bool is_assignable(const Type *target, const Type *value);
 
 // Allocate a function type from the arena.
-Type *make_function_type(Arena *arena, TypeList params, Type *ret);
+Type *make_function_type(Arena *arena, TypeList params, BoolList mut_params, Type *ret);
 
 // Allocate an external function type from the arena.
 Type *make_ext_function_type(Arena *arena, TypeList params, Type *ret, bool variadic);
+
+// Allocate a struct type from the arena.
+Type *make_struct_type(Arena *arena, SV name, StructTypeFieldList fields);
+
+// Look up a field by name in a struct type. Returns the field index, or -1 if not found.
+int struct_field_index(const Type *struct_type, SV field_name);
+
+// Get a field's type by index (no bounds check).
+Type *struct_field_type(const Type *struct_type, int index);

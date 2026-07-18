@@ -11,6 +11,7 @@
 typedef struct {
     SV    name;
     Type *type;
+    bool  mutable_; // true if declared as let mut or is a mut parameter
 } Symbol;
 
 typedef DA(Symbol) SymbolList;

@@ -84,6 +84,13 @@ static bool parse_params(Parser *p, ParamList *out, bool is_extern, bool *out_va
             break;
         }
 
+        // Optional mut prefix: mut p: Point
+        bool param_mut = false;
+        if (parser_match(p, TK_MUT)) {
+            parser_eat(p);
+            param_mut = true;
+        }
+
         Token *name_tok = parser_expect(p, TK_IDENTIFIER, "expected parameter name");
         if (!name_tok) return false;
 
@@ -95,6 +102,7 @@ static bool parse_params(Parser *p, ParamList *out, bool is_extern, bool *out_va
         Param param;
         param.name      = name_tok->value;
         param.type_name = type_tok->value;
+        param.mutable_  = param_mut;
         param.loc       = name_tok->loc;
         da_push(out, param);
 
@@ -256,6 +264,76 @@ static Node *parse_expression_stmt(Parser *p) {
     return expr;
 }
 
+// struct Name { field: type; ... }
+static Node *parse_struct_decl(Parser *p) {
+    Token *struct_tok = parser_eat(p); // struct
+
+    Token *name_tok = parser_expect(p, TK_IDENTIFIER, "expected struct name");
+    if (!name_tok) return NULL;
+
+    if (!parser_expect(p, TK_LBRACE, "expected '{' to open struct body")) return NULL;
+
+    AstStructDecl *node = ast_alloc(p->arena, AstStructDecl, NK_STRUCT_DECL, struct_tok->loc);
+    node->name = name_tok->value;
+
+    while (!parser_match(p, TK_RBRACE) && !parser_match(p, TK_EOF)) {
+        Token *field_name = parser_expect(p, TK_IDENTIFIER, "expected field name");
+        if (!field_name) return NULL;
+        if (!parser_expect(p, TK_COLON, "expected ':' after field name")) return NULL;
+        Token *field_type = parser_expect(p, TK_IDENTIFIER, "expected field type");
+        if (!field_type) return NULL;
+        if (!parser_expect(p, TK_SEMICOLON, "expected ';' after field declaration")) return NULL;
+
+        StructField f;
+        f.name      = field_name->value;
+        f.type_name = field_type->value;
+        f.loc       = field_name->loc;
+        da_push(&node->fields, f);
+    }
+
+    if (!parser_expect(p, TK_RBRACE, "expected '}' to close struct body")) return NULL;
+    return (Node *)node;
+}
+
+// Name{field=expr, ...}
+static Node *parse_struct_literal(Parser *p, Token *name_tok) {
+    parser_eat(p); // {
+
+    AstStructLiteral *node = ast_alloc(p->arena, AstStructLiteral, NK_STRUCT_LITERAL, name_tok->loc);
+    node->struct_name = name_tok->value;
+
+    bool trailing_comma = false;
+    while (!parser_match(p, TK_RBRACE) && !parser_match(p, TK_EOF)) {
+        trailing_comma = false;
+
+        Token *field_name = parser_expect(p, TK_IDENTIFIER, "expected field name");
+        if (!field_name) return NULL;
+        if (!parser_expect(p, TK_EQ, "expected '=' after field name in struct literal")) return NULL;
+
+        Node *value = parse_expression(p);
+        if (!value) return NULL;
+
+        StructInit init;
+        init.name  = field_name->value;
+        init.value = value;
+        init.loc   = field_name->loc;
+        da_push(&node->fields, init);
+
+        if (parser_match(p, TK_COMMA)) {
+            trailing_comma = true;
+            parser_eat(p);
+        }
+    }
+
+    if (trailing_comma) {
+        snprintf(p->errbuf, sizeof(p->errbuf), "trailing comma in struct literal");
+        return NULL;
+    }
+
+    if (!parser_expect(p, TK_RBRACE, "expected '}' to close struct literal")) return NULL;
+    return (Node *)node;
+}
+
 // while <cond> <block>
 static Node *parse_while(Parser *p) {
     Token *while_tok = parser_eat(p); // while
@@ -289,6 +367,7 @@ static Node *parse_statement(Parser *p) {
     switch (parser_peek(p, 0)->type) {
         case TK_EXTERN: return parse_extern_function_decl(p);
         case TK_FN:     return parse_function_decl(p);
+        case TK_STRUCT: return parse_struct_decl(p);
         case TK_LET:    return parse_var_decl(p);
         case TK_RETURN: return parse_return(p);
         case TK_IF:     return parse_if(p);
@@ -322,31 +401,36 @@ static Node *parse_equality(Parser *p);
 static Node *parse_assignment(Parser *p);
 
 static Node *parse_primary(Parser *p) {
-    Token *t = parser_peek(p, 0);
+    Token *cur = parser_peek(p, 0);
 
-    switch (t->type) {
+    switch (cur->type) {
         case TK_IDENTIFIER: {
-            parser_eat(p);
+            Token *t = parser_eat(p);
+            // Identifier followed by '{' → struct literal
+            if (parser_match(p, TK_LBRACE)) {
+                return parse_struct_literal(p, t);
+            }
             AstIdentifier *node = ast_alloc(p->arena, AstIdentifier, NK_IDENTIFIER, t->loc);
             node->name = t->value;
             return (Node *)node;
         }
         case TK_NUMBER: {
-            parser_eat(p);
+            Token *t = parser_eat(p);
             AstNumericLiteral *node = ast_alloc(p->arena, AstNumericLiteral, NK_NUMERIC_LITERAL, t->loc);
             node->raw   = t->value;
-            node->value = (int64_t)strtoll(t->value.data, NULL, 10);
+            // Use strtod for both int and float literals; the typechecker determines the final type
+            node->value = strtod(t->value.data, NULL);
             return (Node *)node;
         }
         case TK_STRING: {
-            parser_eat(p);
+            Token *t = parser_eat(p);
             AstStringLiteral *node = ast_alloc(p->arena, AstStringLiteral, NK_STRING_LITERAL, t->loc);
             node->value = t->value;
             return (Node *)node;
         }
         case TK_TRUE:
         case TK_FALSE: {
-            parser_eat(p);
+            Token *t = parser_eat(p);
             AstBooleanLiteral *node = ast_alloc(p->arena, AstBooleanLiteral, NK_BOOLEAN_LITERAL, t->loc);
             node->value = (t->type == TK_TRUE);
             return (Node *)node;
@@ -361,46 +445,63 @@ static Node *parse_primary(Parser *p) {
         default: {
             snprintf(p->errbuf, sizeof(p->errbuf),
                      "unexpected token '%s' at line %u, col %u",
-                     token_type_name(t->type), t->loc.line, t->loc.col);
+                     token_type_name(cur->type), cur->loc.line, cur->loc.col);
             return NULL;
         }
     }
 }
 
-// <expr>(<args>)  — chained: f(1)(2) works naturally via the loop
+// <expr>(<args>) and <expr>.field — chained postfix operators
 static Node *parse_postfix(Parser *p) {
     Node *left = parse_primary(p);
     if (!left) return NULL;
 
-    while (parser_match(p, TK_LPAREN)) {
-        Token *lparen = parser_eat(p); // (
-        AstCallExpr *call = ast_alloc(p->arena, AstCallExpr, NK_CALL_EXPR, left->loc);
-        call->callee = left;
+    while (true) {
+        if (parser_match(p, TK_LPAREN)) {
+            // Function call
+            Token *lparen = parser_eat(p);
+            AstCallExpr *call = ast_alloc(p->arena, AstCallExpr, NK_CALL_EXPR, left->loc);
+            call->callee = left;
 
-        bool trailing_comma = false;
-        while (!parser_match(p, TK_RPAREN) && !parser_match(p, TK_EOF)) {
-            trailing_comma = false;
-            Node *arg = parse_expression(p);
-            if (!arg) return NULL;
-            da_push(&call->args, arg);
+            bool trailing_comma = false;
+            while (!parser_match(p, TK_RPAREN) && !parser_match(p, TK_EOF)) {
+                trailing_comma = false;
+                Node *arg = parse_expression(p);
+                if (!arg) return NULL;
+                da_push(&call->args, arg);
 
-            if (parser_match(p, TK_COMMA)) {
-                trailing_comma = true;
-                parser_eat(p);
-            } else {
-                break;
+                if (parser_match(p, TK_COMMA)) {
+                    trailing_comma = true;
+                    parser_eat(p);
+                } else {
+                    break;
+                }
             }
-        }
 
-        if (trailing_comma) {
-            snprintf(p->errbuf, sizeof(p->errbuf),
-                     "trailing comma in argument list at line %u, col %u",
-                     lparen->loc.line, lparen->loc.col);
-            return NULL;
-        }
+            if (trailing_comma) {
+                snprintf(p->errbuf, sizeof(p->errbuf),
+                         "trailing comma in argument list at line %u, col %u",
+                         lparen->loc.line, lparen->loc.col);
+                return NULL;
+            }
 
-        if (!parser_expect(p, TK_RPAREN, "expected ')' to close argument list")) return NULL;
-        left = (Node *)call;
+            if (!parser_expect(p, TK_RPAREN, "expected ')' to close argument list")) return NULL;
+            left = (Node *)call;
+
+        } else if (parser_match(p, TK_DOT)) {
+            // Field access
+            parser_eat(p); // .
+            Token *field_tok = parser_expect(p, TK_IDENTIFIER, "expected field name after '.'");
+            if (!field_tok) return NULL;
+
+            AstFieldAccess *fa = ast_alloc(p->arena, AstFieldAccess, NK_FIELD_ACCESS, left->loc);
+            fa->object = left;
+            fa->field  = field_tok->value;
+            left = (Node *)fa;
+
+        } else {
+            break;
+        }
     }
 
     return left;

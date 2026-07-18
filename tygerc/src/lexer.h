@@ -31,6 +31,7 @@ typedef enum {
     TK_WHILE,
     TK_BREAK,
     TK_CONTINUE,
+    TK_STRUCT,
 
     // Multi-char operators / punctuation
     TK_DOTDOTDOT,  // ...
@@ -63,6 +64,7 @@ typedef enum {
     TK_SEMICOLON,  // ;
     TK_COLON,      // :
     TK_COMMA,      // ,
+    TK_DOT,        // .
 
     // Literals / identifiers
     TK_IDENTIFIER,

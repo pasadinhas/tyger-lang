@@ -46,7 +46,9 @@ struct Codegen {
     char                            errbuf[512];
 
     std::map<std::string, llvm::AllocaInst *> locals;
-    std::vector<LoopContext>                  loop_stack; // for break/continue
+    std::vector<LoopContext>                  loop_stack;
+    // Maps struct type name → LLVM StructType* (populated by gen_struct_decl)
+    std::map<std::string, llvm::StructType *> struct_types;
 
     Codegen(const char *module_name, Arena *a)
         : ctx(), mod(module_name, ctx), builder(ctx), arena(a) {
@@ -57,6 +59,15 @@ struct Codegen {
 // ---------------------------------------------------------------------------
 // Type mapping: Tyger Type* → llvm::Type*
 // ---------------------------------------------------------------------------
+
+// Get the LLVM StructType* for a Tyger struct type (must have been declared first)
+static llvm::StructType *get_llvm_struct_type(Codegen &cg, const Type *type) {
+    std::string name(type->struct_.name.data, type->struct_.name.len);
+    auto it = cg.struct_types.find(name);
+    if (it != cg.struct_types.end()) return it->second;
+    // Shouldn't happen after typechecking, but return opaque struct as fallback
+    return llvm::StructType::create(cg.ctx, name);
+}
 
 static llvm::Type *llvm_type(Codegen &cg, const Type *type) {
     if (!type) return llvm::Type::getVoidTy(cg.ctx);
@@ -83,6 +94,9 @@ static llvm::Type *llvm_type(Codegen &cg, const Type *type) {
         case TY_FUNCTION:
         case TY_EXT_FUNCTION:
             // Functions are referenced by pointer in call expressions
+            return llvm::PointerType::getUnqual(cg.ctx);
+        case TY_STRUCT:
+            // Structs are always passed as pointers
             return llvm::PointerType::getUnqual(cg.ctx);
         case TY_COUNT:
             break;
@@ -134,14 +148,26 @@ static llvm::Value *gen_extern_function_decl(Codegen &cg, AstExternFunctionDecl 
 }
 
 static llvm::Value *gen_function_decl(Codegen &cg, AstFunctionDecl *node) {
-    // Build param types
+    // Use the typechecker-annotated function type (stored on node->type)
+    // which has already resolved struct types correctly.
+    // Fall back to string resolution for primitives if type not annotated.
+    Type *fn_tyger_type = node->type; // TY_FUNCTION, set by typechecker first pass
+
     std::vector<llvm::Type *> param_types;
     for (size_t i = 0; i < node->params.len; i++) {
-        Type *pt = type_from_sv(node->params.data[i].type_name);
+        Type *pt = NULL;
+        if (fn_tyger_type && fn_tyger_type->kind == TY_FUNCTION &&
+            i < fn_tyger_type->function.params.len) {
+            pt = fn_tyger_type->function.params.data[i];
+        }
+        if (!pt) pt = type_from_sv(node->params.data[i].type_name);
         param_types.push_back(llvm_type(cg, pt));
     }
 
-    Type *ret_ty = type_from_sv(node->return_type_name);
+    Type *ret_ty = NULL;
+    if (fn_tyger_type && fn_tyger_type->kind == TY_FUNCTION)
+        ret_ty = fn_tyger_type->function.ret;
+    if (!ret_ty) ret_ty = type_from_sv(node->return_type_name);
     llvm::FunctionType *ft = llvm::FunctionType::get(
         llvm_type(cg, ret_ty), param_types, false);
 
@@ -170,10 +196,27 @@ static llvm::Value *gen_function_decl(Codegen &cg, AstFunctionDecl *node) {
     for (auto &arg : fn->args()) {
         std::string pname(node->params.data[idx].name.data,
                           node->params.data[idx].name.len);
-        llvm::AllocaInst *alloca = create_entry_alloca(cg, fn, arg.getType(),
-                                                        (pname + ".addr").c_str());
-        cg.builder.CreateStore(&arg, alloca);
-        cg.locals[pname] = alloca;
+
+        // Get the Tyger type for this param (prefer annotated, fall back to string)
+        Type *param_type = NULL;
+        if (fn_tyger_type && fn_tyger_type->kind == TY_FUNCTION &&
+            idx < fn_tyger_type->function.params.len) {
+            param_type = fn_tyger_type->function.params.data[idx];
+        }
+        if (!param_type) param_type = type_from_sv(node->params.data[idx].type_name);
+
+        // For struct params, the argument IS already a pointer — store it in a ptr slot
+        if (param_type && param_type->kind == TY_STRUCT) {
+            llvm::AllocaInst *ptr_slot = create_entry_alloca(
+                cg, fn, llvm::PointerType::getUnqual(cg.ctx), (pname + ".ptr").c_str());
+            cg.builder.CreateStore(&arg, ptr_slot);
+            cg.locals[pname] = ptr_slot;
+        } else {
+            llvm::AllocaInst *alloca = create_entry_alloca(cg, fn, arg.getType(),
+                                                            (pname + ".addr").c_str());
+            cg.builder.CreateStore(&arg, alloca);
+            cg.locals[pname] = alloca;
+        }
         idx++;
     }
 
@@ -199,9 +242,19 @@ static llvm::Value *gen_var_decl(Codegen &cg, AstVarDecl *node) {
     llvm::Value *init_val = gen_node(cg, node->init);
     if (!init_val) return nullptr;
 
-    llvm::Type *ty = llvm_type(cg, node->type);
     std::string name(node->name.data, node->name.len);
 
+    // For struct variables, the init_val is already a pointer to the struct.
+    // Store the pointer in a ptr-sized alloca so gen_identifier can load it.
+    if (node->type && node->type->kind == TY_STRUCT) {
+        llvm::AllocaInst *ptr_slot = create_entry_alloca(
+            cg, fn, llvm::PointerType::getUnqual(cg.ctx), (name + ".ptr").c_str());
+        cg.builder.CreateStore(init_val, ptr_slot);
+        cg.locals[name] = ptr_slot;
+        return ptr_slot;
+    }
+
+    llvm::Type *ty = llvm_type(cg, node->type);
     llvm::AllocaInst *alloca = create_entry_alloca(cg, fn, ty, name.c_str());
     cg.builder.CreateStore(init_val, alloca);
     cg.locals[name] = alloca;
@@ -270,10 +323,16 @@ static llvm::Value *gen_if(Codegen &cg, AstIf *node) {
 static llvm::Value *gen_identifier(Codegen &cg, AstIdentifier *node) {
     std::string name(node->name.data, node->name.len);
 
-    // Local variable — load from alloca
+    // Local variable — load from alloca (or return pointer for structs)
     auto it = cg.locals.find(name);
     if (it != cg.locals.end()) {
         llvm::AllocaInst *alloca = it->second;
+        // For struct types, return the pointer itself (structs are pass-by-reference)
+        if (node->type && node->type->kind == TY_STRUCT) {
+            // The alloca holds a ptr-to-struct; load that pointer
+            return cg.builder.CreateLoad(
+                llvm::PointerType::getUnqual(cg.ctx), alloca, name.c_str());
+        }
         return cg.builder.CreateLoad(alloca->getAllocatedType(), alloca, name.c_str());
     }
 
@@ -286,9 +345,12 @@ static llvm::Value *gen_identifier(Codegen &cg, AstIdentifier *node) {
 }
 
 static llvm::Value *gen_numeric_literal(Codegen &cg, AstNumericLiteral *node) {
-    // Default to i64
+    if (node->type && node->type->kind == TY_FLOAT) {
+        return llvm::ConstantFP::get(llvm_type(cg, node->type), node->value);
+    }
+    // Default: i64 integer
     return llvm::ConstantInt::get(llvm::Type::getInt64Ty(cg.ctx),
-                                  (uint64_t)node->value, true);
+                                  (uint64_t)(int64_t)node->value, true);
 }
 
 static llvm::Value *gen_string_literal(Codegen &cg, AstStringLiteral *node) {
@@ -398,6 +460,111 @@ static llvm::Value *gen_call_expr(Codegen &cg, AstCallExpr *node) {
     return call;
 }
 
+static llvm::Value *gen_struct_decl(Codegen &cg, AstStructDecl *node) {
+    // Build the LLVM struct type from field types
+    std::vector<llvm::Type *> field_types;
+    Type *struct_type = node->type; // annotated by typechecker
+
+    for (size_t i = 0; i < struct_type->struct_.fields.len; i++) {
+        Type *ft = struct_type->struct_.fields.data[i].type;
+        // For struct fields that are themselves structs, use the concrete struct type
+        if (ft->kind == TY_STRUCT) {
+            field_types.push_back(get_llvm_struct_type(cg, ft));
+        } else {
+            field_types.push_back(llvm_type(cg, ft));
+        }
+    }
+
+    std::string name(node->name.data, node->name.len);
+    llvm::StructType *st = llvm::StructType::create(cg.ctx, field_types, name);
+    cg.struct_types[name] = st;
+    return nullptr;
+}
+
+static llvm::Value *gen_struct_literal(Codegen &cg, AstStructLiteral *node) {
+    // The struct type must have been registered by gen_struct_decl
+    std::string name(node->struct_name.data, node->struct_name.len);
+    auto it = cg.struct_types.find(name);
+    if (it == cg.struct_types.end()) {
+        snprintf(cg.errbuf, sizeof(cg.errbuf),
+                 "codegen: struct '%s' not registered", name.c_str());
+        return nullptr;
+    }
+    llvm::StructType *st = it->second;
+
+    // Allocate space for the struct on the stack
+    llvm::Function *fn = cg.builder.GetInsertBlock()->getParent();
+    llvm::AllocaInst *alloca = create_entry_alloca(cg, fn, st, (name + ".tmp").c_str());
+
+    // Fill in each field in declaration order (node->type has the canonical field order)
+    Type *struct_type = node->type;
+    for (size_t i = 0; i < struct_type->struct_.fields.len; i++) {
+        SV field_name = struct_type->struct_.fields.data[i].name;
+
+        // Find the matching initialiser (may be in any order)
+        Node *val_node = nullptr;
+        for (size_t j = 0; j < node->fields.len; j++) {
+            if (sv_eq(node->fields.data[j].name, field_name)) {
+                val_node = node->fields.data[j].value;
+                break;
+            }
+        }
+        if (!val_node) {
+            snprintf(cg.errbuf, sizeof(cg.errbuf),
+                     "codegen: missing field in struct literal");
+            return nullptr;
+        }
+
+        llvm::Value *val = gen_node(cg, val_node);
+        if (!val) return nullptr;
+
+        // GEP to the field pointer and store
+        llvm::Value *field_ptr = cg.builder.CreateStructGEP(st, alloca, (unsigned)i);
+        cg.builder.CreateStore(val, field_ptr);
+    }
+
+    return alloca; // return pointer to the struct
+}
+
+static llvm::Value *gen_field_access(Codegen &cg, AstFieldAccess *node) {
+    // Generate the object (should return a pointer to the struct)
+    llvm::Value *obj_ptr = gen_node(cg, node->object);
+    if (!obj_ptr) return nullptr;
+
+    // Get the struct type
+    Type *struct_type = node->object->type;
+    if (!struct_type || struct_type->kind != TY_STRUCT) {
+        snprintf(cg.errbuf, sizeof(cg.errbuf), "codegen: field access on non-struct");
+        return nullptr;
+    }
+
+    std::string sname(struct_type->struct_.name.data, struct_type->struct_.name.len);
+    auto it = cg.struct_types.find(sname);
+    if (it == cg.struct_types.end()) {
+        snprintf(cg.errbuf, sizeof(cg.errbuf),
+                 "codegen: struct '%s' not registered", sname.c_str());
+        return nullptr;
+    }
+    llvm::StructType *st = it->second;
+
+    int idx = struct_field_index(struct_type, node->field);
+    if (idx < 0) {
+        snprintf(cg.errbuf, sizeof(cg.errbuf), "codegen: unknown struct field");
+        return nullptr;
+    }
+
+    // GEP to the field and load its value
+    llvm::Value *field_ptr = cg.builder.CreateStructGEP(st, obj_ptr, (unsigned)idx);
+    Type *field_type = struct_field_type(struct_type, idx);
+    llvm::Type *llvm_ft = llvm_type(cg, field_type);
+
+    // For primitive fields, load the value; for struct fields, return the pointer
+    if (field_type->kind == TY_STRUCT) {
+        return field_ptr;
+    }
+    return cg.builder.CreateLoad(llvm_ft, field_ptr);
+}
+
 static llvm::Value *gen_while(Codegen &cg, AstWhile *node) {
     llvm::Function *fn = cg.builder.GetInsertBlock()->getParent();
 
@@ -460,16 +627,26 @@ static llvm::Value *gen_continue(Codegen &cg, Node * /*node*/) {
 // ---------------------------------------------------------------------------
 
 static llvm::Value *gen_node(Codegen &cg, Node *node) {
-    static_assert(NK_COUNT == 17, "gen_node: NodeKind changed, update this switch");
+    static_assert(NK_COUNT == 20, "gen_node: NodeKind changed, update this switch");
 
     if (!node) return nullptr;
 
     switch (node->kind) {
         case NK_PROGRAM: {
             AstProgram *p = (AstProgram *)node;
+            // First pass: register all struct types so function decls can reference them
             for (size_t i = 0; i < p->body.len; i++) {
-                gen_node(cg, p->body.data[i]);
-                if (cg.errbuf[0]) return nullptr;
+                if (p->body.data[i]->kind == NK_STRUCT_DECL) {
+                    gen_node(cg, p->body.data[i]);
+                    if (cg.errbuf[0]) return nullptr;
+                }
+            }
+            // Second pass: everything else
+            for (size_t i = 0; i < p->body.len; i++) {
+                if (p->body.data[i]->kind != NK_STRUCT_DECL) {
+                    gen_node(cg, p->body.data[i]);
+                    if (cg.errbuf[0]) return nullptr;
+                }
             }
             return nullptr;
         }
@@ -482,6 +659,9 @@ static llvm::Value *gen_node(Codegen &cg, Node *node) {
         case NK_WHILE:                return gen_while(cg, (AstWhile *)node);
         case NK_BREAK:                return gen_break(cg, node);
         case NK_CONTINUE:             return gen_continue(cg, node);
+        case NK_STRUCT_DECL:          return gen_struct_decl(cg, (AstStructDecl *)node);
+        case NK_STRUCT_LITERAL:       return gen_struct_literal(cg, (AstStructLiteral *)node);
+        case NK_FIELD_ACCESS:         return gen_field_access(cg, (AstFieldAccess *)node);
         case NK_IDENTIFIER:           return gen_identifier(cg, (AstIdentifier *)node);
         case NK_NUMERIC_LITERAL:      return gen_numeric_literal(cg, (AstNumericLiteral *)node);
         case NK_STRING_LITERAL:       return gen_string_literal(cg, (AstStringLiteral *)node);

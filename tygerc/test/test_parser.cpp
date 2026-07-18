@@ -323,6 +323,116 @@ static void test_factorial_example() {
 }
 
 // ---------------------------------------------------------------------------
+// Struct declaration
+// ---------------------------------------------------------------------------
+
+static void test_struct_decl() {
+    AstProgram *p = must_parse("struct Point { x: f32; y: f32; }");
+    ASSERT_NOT_NULL(p);
+    ASSERT_EQ(1u, p->body.len);
+    AstStructDecl *s = (AstStructDecl *)p->body.data[0];
+    ASSERT_EQ(NK_STRUCT_DECL, s->kind);
+    ASSERT(sv_eq_cstr(s->name, "Point"));
+    ASSERT_EQ(2u, s->fields.len);
+    ASSERT(sv_eq_cstr(s->fields.data[0].name, "x"));
+    ASSERT(sv_eq_cstr(s->fields.data[0].type_name, "f32"));
+    ASSERT(sv_eq_cstr(s->fields.data[1].name, "y"));
+    ASSERT(sv_eq_cstr(s->fields.data[1].type_name, "f32"));
+}
+
+static void test_struct_decl_empty() {
+    AstProgram *p = must_parse("struct Empty { }");
+    ASSERT_NOT_NULL(p);
+    AstStructDecl *s = (AstStructDecl *)p->body.data[0];
+    ASSERT_EQ(0u, s->fields.len);
+}
+
+// ---------------------------------------------------------------------------
+// Struct literal
+// ---------------------------------------------------------------------------
+
+static void test_struct_literal() {
+    AstProgram *p = must_parse("let p = Point{x=1.0, y=2.0};");
+    ASSERT_NOT_NULL(p);
+    AstVarDecl *decl = (AstVarDecl *)p->body.data[0];
+    AstStructLiteral *lit = (AstStructLiteral *)decl->init;
+    ASSERT_EQ(NK_STRUCT_LITERAL, lit->kind);
+    ASSERT(sv_eq_cstr(lit->struct_name, "Point"));
+    ASSERT_EQ(2u, lit->fields.len);
+    ASSERT(sv_eq_cstr(lit->fields.data[0].name, "x"));
+    ASSERT(sv_eq_cstr(lit->fields.data[1].name, "y"));
+}
+
+static void test_struct_literal_single_field() {
+    AstProgram *p = must_parse("let p = Wrapper{val=42};");
+    ASSERT_NOT_NULL(p);
+    AstVarDecl *decl = (AstVarDecl *)p->body.data[0];
+    AstStructLiteral *lit = (AstStructLiteral *)decl->init;
+    ASSERT_EQ(NK_STRUCT_LITERAL, lit->kind);
+    ASSERT_EQ(1u, lit->fields.len);
+}
+
+// ---------------------------------------------------------------------------
+// Field access
+// ---------------------------------------------------------------------------
+
+static void test_field_access() {
+    AstProgram *p = must_parse("let x = p.x;");
+    ASSERT_NOT_NULL(p);
+    AstVarDecl *decl = (AstVarDecl *)p->body.data[0];
+    AstFieldAccess *fa = (AstFieldAccess *)decl->init;
+    ASSERT_EQ(NK_FIELD_ACCESS, fa->kind);
+    ASSERT(sv_eq_cstr(fa->field, "x"));
+    ASSERT_EQ(NK_IDENTIFIER, fa->object->kind);
+}
+
+static void test_field_access_chained() {
+    // a.b.c → FieldAccess(FieldAccess(a, b), c)
+    AstProgram *p = must_parse("let x = a.b.c;");
+    ASSERT_NOT_NULL(p);
+    AstVarDecl *decl = (AstVarDecl *)p->body.data[0];
+    AstFieldAccess *outer = (AstFieldAccess *)decl->init;
+    ASSERT_EQ(NK_FIELD_ACCESS, outer->kind);
+    ASSERT(sv_eq_cstr(outer->field, "c"));
+    AstFieldAccess *inner = (AstFieldAccess *)outer->object;
+    ASSERT_EQ(NK_FIELD_ACCESS, inner->kind);
+    ASSERT(sv_eq_cstr(inner->field, "b"));
+}
+
+// ---------------------------------------------------------------------------
+// Mut parameter
+// ---------------------------------------------------------------------------
+
+static void test_mut_param() {
+    AstProgram *p = must_parse("fn f(mut p: Point) -> i64 { return 0; }");
+    ASSERT_NOT_NULL(p);
+    AstFunctionDecl *fn = (AstFunctionDecl *)p->body.data[0];
+    ASSERT_EQ(1u, fn->params.len);
+    ASSERT(fn->params.data[0].mutable_);
+    ASSERT(sv_eq_cstr(fn->params.data[0].name, "p"));
+}
+
+static void test_non_mut_param() {
+    AstProgram *p = must_parse("fn f(p: Point) -> i64 { return 0; }");
+    ASSERT_NOT_NULL(p);
+    AstFunctionDecl *fn = (AstFunctionDecl *)p->body.data[0];
+    ASSERT(!fn->params.data[0].mutable_);
+}
+
+// ---------------------------------------------------------------------------
+// Float literal
+// ---------------------------------------------------------------------------
+
+static void test_float_literal_parsed() {
+    AstProgram *p = must_parse("let x = 3.14;");
+    ASSERT_NOT_NULL(p);
+    AstVarDecl *decl = (AstVarDecl *)p->body.data[0];
+    AstNumericLiteral *lit = (AstNumericLiteral *)decl->init;
+    ASSERT_EQ(NK_NUMERIC_LITERAL, lit->kind);
+    ASSERT(lit->value > 3.13 && lit->value < 3.15);
+}
+
+// ---------------------------------------------------------------------------
 // While / break / continue
 // ---------------------------------------------------------------------------
 
@@ -476,6 +586,25 @@ int main(void) {
 
     printf("\n=== Full example ===\n");
     RUN_TEST(test_factorial_example);
+
+    printf("\n=== Struct declaration ===\n");
+    RUN_TEST(test_struct_decl);
+    RUN_TEST(test_struct_decl_empty);
+
+    printf("\n=== Struct literal ===\n");
+    RUN_TEST(test_struct_literal);
+    RUN_TEST(test_struct_literal_single_field);
+
+    printf("\n=== Field access ===\n");
+    RUN_TEST(test_field_access);
+    RUN_TEST(test_field_access_chained);
+
+    printf("\n=== Mut parameter ===\n");
+    RUN_TEST(test_mut_param);
+    RUN_TEST(test_non_mut_param);
+
+    printf("\n=== Float literal ===\n");
+    RUN_TEST(test_float_literal_parsed);
 
     printf("\n=== While / break / continue ===\n");
     RUN_TEST(test_while_basic);

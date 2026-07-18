@@ -27,6 +27,11 @@ typedef enum {
     NK_BREAK,
     NK_CONTINUE,
 
+    // Structs
+    NK_STRUCT_DECL,
+    NK_STRUCT_LITERAL,
+    NK_FIELD_ACCESS,
+
     // Expressions
     NK_IDENTIFIER,
     NK_NUMERIC_LITERAL,
@@ -73,6 +78,7 @@ typedef DA(struct Param) ParamList;
 typedef struct Param {
     SV   name;
     SV   type_name; // the raw string e.g. "i64", resolved to Type* by typechecker
+    bool mutable_;  // true if declared as "mut p: Type"
     Loc  loc;
 } Param;
 
@@ -142,17 +148,62 @@ typedef struct {
 
 // break; and continue; — no extra fields beyond the header
 
+// ---------------------------------------------------------------------------
+// Struct field — used in struct declarations and literals
+// ---------------------------------------------------------------------------
+
+typedef struct {
+    SV   name;
+    SV   type_name; // for declarations
+    Loc  loc;
+} StructField;
+
+typedef DA(StructField) StructFieldList;
+
+// ---------------------------------------------------------------------------
+// Struct literal field initialiser — name = expr
+// ---------------------------------------------------------------------------
+
+typedef struct {
+    SV    name;
+    Node *value;
+    Loc   loc;
+} StructInit;
+
+typedef DA(StructInit) StructInitList;
+
+// struct Point { x: f32; y: f32; }
+typedef struct {
+    NODE_HEADER;
+    SV              name;
+    StructFieldList fields;
+} AstStructDecl;
+
+// Point{x=1.0, y=2.0}
+typedef struct {
+    NODE_HEADER;
+    SV             struct_name;
+    StructInitList fields;
+} AstStructLiteral;
+
+// expr.field
+typedef struct {
+    NODE_HEADER;
+    Node *object;
+    SV    field;
+} AstFieldAccess;
+
 // <name>
 typedef struct {
     NODE_HEADER;
     SV name;
 } AstIdentifier;
 
-// 42
+// 42 or 3.14
 typedef struct {
     NODE_HEADER;
-    SV      raw;   // original source text
-    int64_t value;
+    SV     raw;    // original source text
+    double value;  // parsed value (used as int64 or double depending on type)
 } AstNumericLiteral;
 
 // "hello"

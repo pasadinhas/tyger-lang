@@ -50,6 +50,8 @@ static void test_tk_false()       { assert_single_token("false",  TK_FALSE,     
 static void test_tk_while()       { assert_single_token("while",  TK_WHILE,      NULL); }
 static void test_tk_break()       { assert_single_token("break",  TK_BREAK,      NULL); }
 static void test_tk_continue()    { assert_single_token("continue", TK_CONTINUE, NULL); }
+static void test_tk_struct()      { assert_single_token("struct", TK_STRUCT,     NULL); }
+static void test_tk_dot()         { assert_single_token(".",      TK_DOT,        NULL); }
 static void test_tk_dotdotdot()   { assert_single_token("...",    TK_DOTDOTDOT,  NULL); }
 static void test_tk_arrow()       { assert_single_token("->",     TK_ARROW,      NULL); }
 static void test_tk_geq()         { assert_single_token(">=",     TK_GEQ,        NULL); }
@@ -83,6 +85,45 @@ static void test_tk_eof() {
     TokenList tokens = must_lex("");
     ASSERT(tokens.len == 1);
     ASSERT_EQ(TK_EOF, tokens.data[0].type);
+    da_free(&tokens);
+}
+
+static void test_dot_not_dotdotdot() {
+    TokenList tokens = must_lex("...");
+    ASSERT_EQ(TK_DOTDOTDOT, tokens.data[0].type);
+    da_free(&tokens);
+}
+
+// ---------------------------------------------------------------------------
+// Float literal tests
+// ---------------------------------------------------------------------------
+
+static void test_float_literal() {
+    TokenList tokens = must_lex("5.44");
+    ASSERT_EQ(2u, tokens.len); // number + EOF
+    ASSERT_EQ(TK_NUMBER, tokens.data[0].type);
+    ASSERT(sv_eq_cstr(tokens.data[0].value, "5.44"));
+    da_free(&tokens);
+}
+
+static void test_float_field_access_not_confused() {
+    // p.x should be IDENTIFIER DOT IDENTIFIER, not a float
+    TokenList tokens = must_lex("p.x");
+    ASSERT_EQ(4u, tokens.len); // p + . + x + EOF
+    ASSERT_EQ(TK_IDENTIFIER, tokens.data[0].type);
+    ASSERT_EQ(TK_DOT,        tokens.data[1].type);
+    ASSERT_EQ(TK_IDENTIFIER, tokens.data[2].type);
+    da_free(&tokens);
+}
+
+static void test_integer_dot_not_float() {
+    // 5.x should be NUMBER DOT IDENTIFIER (not a float — no digit after dot)
+    TokenList tokens = must_lex("5.x");
+    ASSERT_EQ(4u, tokens.len);
+    ASSERT_EQ(TK_NUMBER,     tokens.data[0].type);
+    ASSERT(sv_eq_cstr(tokens.data[0].value, "5"));
+    ASSERT_EQ(TK_DOT,        tokens.data[1].type);
+    ASSERT_EQ(TK_IDENTIFIER, tokens.data[2].type);
     da_free(&tokens);
 }
 
@@ -310,6 +351,8 @@ int main(void) {
     RUN_TEST(test_tk_while);
     RUN_TEST(test_tk_break);
     RUN_TEST(test_tk_continue);
+    RUN_TEST(test_tk_struct);
+    RUN_TEST(test_tk_dot);
     RUN_TEST(test_tk_dotdotdot);
     RUN_TEST(test_tk_arrow);
     RUN_TEST(test_tk_geq);
@@ -340,6 +383,11 @@ int main(void) {
     RUN_TEST(test_tk_number);
     RUN_TEST(test_tk_eof);
 
+    printf("\n=== Float literal tests ===\n");
+    RUN_TEST(test_float_literal);
+    RUN_TEST(test_float_field_access_not_confused);
+    RUN_TEST(test_integer_dot_not_float);
+
     printf("\n=== Keyword boundary tests ===\n");
     RUN_TEST(test_keyword_boundary_let);
     RUN_TEST(test_keyword_boundary_fn);
@@ -355,6 +403,7 @@ int main(void) {
     RUN_TEST(test_gt_alone);
     RUN_TEST(test_arrow_not_minus);
     RUN_TEST(test_minus_alone);
+    RUN_TEST(test_dot_not_dotdotdot);
 
     printf("\n=== Comment tests ===\n");
     RUN_TEST(test_line_comment);

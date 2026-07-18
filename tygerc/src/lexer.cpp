@@ -9,7 +9,7 @@
 
 const char *token_type_name(TokenType type) {
     // If TK_COUNT changes, update this switch.
-    static_assert(TK_COUNT == 42, "token_type_name: token list changed, update this switch");
+    static_assert(TK_COUNT == 44, "token_type_name: token list changed, update this switch");
     switch (type) {
         case TK_LET:         return "let";
         case TK_MUT:         return "mut";
@@ -23,6 +23,7 @@ const char *token_type_name(TokenType type) {
         case TK_WHILE:       return "while";
         case TK_BREAK:       return "break";
         case TK_CONTINUE:    return "continue";
+        case TK_STRUCT:      return "struct";
         case TK_DOTDOTDOT:   return "...";
         case TK_ARROW:       return "->";
         case TK_GEQ:         return ">=";
@@ -49,6 +50,7 @@ const char *token_type_name(TokenType type) {
         case TK_SEMICOLON:   return ";";
         case TK_COLON:       return ":";
         case TK_COMMA:       return ",";
+        case TK_DOT:         return ".";
         case TK_IDENTIFIER:  return "Identifier";
         case TK_NUMBER:      return "Number";
         case TK_STRING:      return "String";
@@ -143,6 +145,12 @@ static bool try_number(Lexer *l, Token *out) {
     if (!is_digit(peek(l, 0))) return false;
     const char *start = l->cur;
     while (is_digit(peek(l, 0))) advance(l, 1);
+    // Optional decimal part: consume '.' only if followed by a digit,
+    // so 'p.x' doesn't get eaten as a float
+    if (peek(l, 0) == '.' && is_digit(peek(l, 1))) {
+        advance(l, 1); // consume '.'
+        while (is_digit(peek(l, 0))) advance(l, 1);
+    }
     out->type  = TK_NUMBER;
     out->value = sv_from_parts(start, (size_t)(l->cur - start));
     return true;
@@ -249,7 +257,7 @@ LexResult lex(SV source, Arena *arena) {
         }
 
         // If TK_COUNT changes, update the matcher chain below.
-        static_assert(TK_COUNT == 42, "lex: token list changed, update the matcher chain");
+        static_assert(TK_COUNT == 44, "lex: token list changed, update the matcher chain");
 
         Loc tok_loc = current_loc(&l);
         Token tok;
@@ -260,6 +268,7 @@ LexResult lex(SV source, Arena *arena) {
 
         // Keywords (must be tried before identifiers, longer keywords first)
         if      (try_keyword(&l, "continue", 8, TK_CONTINUE, &tok)) matched = true;
+        else if (try_keyword(&l, "struct",   6, TK_STRUCT,   &tok)) matched = true;
         else if (try_keyword(&l, "extern",   6, TK_EXTERN,   &tok)) matched = true;
         else if (try_keyword(&l, "return",   6, TK_RETURN,   &tok)) matched = true;
         else if (try_keyword(&l, "false",    5, TK_FALSE,    &tok)) matched = true;
@@ -301,6 +310,7 @@ LexResult lex(SV source, Arena *arena) {
         else if (try_exact(&l, ";", 1, TK_SEMICOLON, &tok)) matched = true;
         else if (try_exact(&l, ":", 1, TK_COLON,     &tok)) matched = true;
         else if (try_exact(&l, ",", 1, TK_COMMA,     &tok)) matched = true;
+        else if (try_exact(&l, ".", 1, TK_DOT,       &tok)) matched = true;
 
         // Literals
         else if (try_string(&l, &tok))     matched = true;

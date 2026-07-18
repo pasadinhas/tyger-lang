@@ -33,7 +33,7 @@ static void pop_scope(Context *ctx) {
 }
 
 // Declare a symbol in the innermost scope. Returns false if already declared.
-static bool scope_declare(Context *ctx, SV name, Type *type) {
+static bool scope_declare(Context *ctx, SV name, Type *type, bool mutable_) {
     Scope *top = &ctx->scopes.data[ctx->scopes.len - 1];
     for (size_t i = 0; i < top->symbols.len; i++) {
         if (sv_eq(top->symbols.data[i].name, name)) {
@@ -44,8 +44,9 @@ static bool scope_declare(Context *ctx, SV name, Type *type) {
         }
     }
     Symbol sym;
-    sym.name = name;
-    sym.type = type;
+    sym.name     = name;
+    sym.type     = type;
+    sym.mutable_ = mutable_;
     da_push(&top->symbols, sym);
     return true;
 }
@@ -60,6 +61,18 @@ static Type *scope_lookup(Context *ctx, SV name) {
         }
     }
     return NULL;
+}
+
+// Check if a symbol is declared as mutable.
+static bool scope_is_mutable(Context *ctx, SV name) {
+    for (int i = (int)ctx->scopes.len - 1; i >= 0; i--) {
+        Scope *s = &ctx->scopes.data[i];
+        for (size_t j = 0; j < s->symbols.len; j++) {
+            if (sv_eq(s->symbols.data[j].name, name))
+                return s->symbols.data[j].mutable_;
+        }
+    }
+    return false;
 }
 
 // Push/pop expected return type (used when entering/leaving a function)
@@ -82,6 +95,16 @@ static Type *current_return_type(Context *ctx) {
 
 static bool tc_node(Node *node, Context *ctx);
 
+// Resolve a type name: first try primitives, then scope (for struct types).
+static Type *resolve_type(Context *ctx, SV name) {
+    Type *t = type_from_sv(name);
+    if (t) return t;
+    // Check scope for struct types
+    t = scope_lookup(ctx, name);
+    if (t && t->kind == TY_STRUCT) return t;
+    return NULL;
+}
+
 // ---------------------------------------------------------------------------
 // Error helper
 // ---------------------------------------------------------------------------
@@ -98,48 +121,73 @@ static bool tc_node(Node *node, Context *ctx);
 // ---------------------------------------------------------------------------
 
 static bool tc_program(AstProgram *node, Context *ctx) {
-    static_assert(NK_COUNT == 17, "tc_program: NodeKind changed");
+    static_assert(NK_COUNT == 20, "tc_program: NodeKind changed");
 
-    // First pass: hoist function and extern function declarations
+    // First pass: hoist function, extern function, and struct declarations
     for (size_t i = 0; i < node->body.len; i++) {
         Node *stmt = node->body.data[i];
 
+        if (stmt->kind == NK_STRUCT_DECL) {
+            AstStructDecl *sd = (AstStructDecl *)stmt;
+            // Build the struct type
+            StructTypeFieldList fields;
+            fields.data = NULL; fields.len = 0; fields.cap = 0;
+            for (size_t f = 0; f < sd->fields.len; f++) {
+                StructField *sf = &sd->fields.data[f];
+                Type *ft = resolve_type(ctx, sf->type_name);
+                if (!ft) TC_ERR(ctx, sf->loc,
+                                "unknown field type '" SV_FMT "'", SV_ARG(sf->type_name));
+                StructTypeField stf;
+                stf.name = sf->name;
+                stf.type = ft;
+                da_push(&fields, stf);
+            }
+            Type *struct_type = make_struct_type(ctx->arena, sd->name, fields);
+            stmt->type = struct_type;
+            if (!scope_declare(ctx, sd->name, struct_type, false)) return false;
+        }
+
         if (stmt->kind == NK_FUNCTION_DECL) {
             AstFunctionDecl *fn = (AstFunctionDecl *)stmt;
-            Type *ret = type_from_sv(fn->return_type_name);
+            Type *ret = resolve_type(ctx, fn->return_type_name);
             if (!ret) TC_ERR(ctx, fn->loc,
                              "unknown return type '" SV_FMT "'", SV_ARG(fn->return_type_name));
 
             TypeList params;
             params.data = NULL; params.len = 0; params.cap = 0;
+            BoolList mut_params;
+            mut_params.data = NULL; mut_params.len = 0; mut_params.cap = 0;
             for (size_t p = 0; p < fn->params.len; p++) {
-                Type *pt = type_from_sv(fn->params.data[p].type_name);
+                Type *pt = resolve_type(ctx, fn->params.data[p].type_name);
                 if (!pt) TC_ERR(ctx, fn->params.data[p].loc,
                                 "unknown parameter type '" SV_FMT "'",
                                 SV_ARG(fn->params.data[p].type_name));
                 da_push(&params, pt);
+                bool is_mut = fn->params.data[p].mutable_;
+                da_push(&mut_params, is_mut);
             }
-            Type *fn_type = make_function_type(ctx->arena, params, ret);
-            if (!scope_declare(ctx, fn->name, fn_type)) return false;
+            Type *fn_type = make_function_type(ctx->arena, params, mut_params, ret);
+            if (!scope_declare(ctx, fn->name, fn_type, false)) return false;
+            stmt->type = fn_type; // annotate the node for codegen
         }
 
         if (stmt->kind == NK_EXTERN_FUNCTION_DECL) {
             AstExternFunctionDecl *fn = (AstExternFunctionDecl *)stmt;
-            Type *ret = type_from_sv(fn->return_type_name);
+            Type *ret = resolve_type(ctx, fn->return_type_name);
             if (!ret) TC_ERR(ctx, fn->loc,
                              "unknown return type '" SV_FMT "'", SV_ARG(fn->return_type_name));
 
             TypeList params;
             params.data = NULL; params.len = 0; params.cap = 0;
             for (size_t p = 0; p < fn->params.len; p++) {
-                Type *pt = type_from_sv(fn->params.data[p].type_name);
+                Type *pt = resolve_type(ctx, fn->params.data[p].type_name);
                 if (!pt) TC_ERR(ctx, fn->params.data[p].loc,
                                 "unknown parameter type '" SV_FMT "'",
                                 SV_ARG(fn->params.data[p].type_name));
                 da_push(&params, pt);
             }
             Type *fn_type = make_ext_function_type(ctx->arena, params, ret, fn->is_variadic);
-            if (!scope_declare(ctx, fn->name, fn_type)) return false;
+            if (!scope_declare(ctx, fn->name, fn_type, false)) return false;
         }
     }
 
@@ -157,7 +205,7 @@ static bool tc_var_decl(AstVarDecl *node, Context *ctx) {
 
     Type *declared_type;
     if (node->type_name.len > 0) {
-        declared_type = type_from_sv(node->type_name);
+        declared_type = resolve_type(ctx, node->type_name);
         if (!declared_type)
             TC_ERR(ctx, node->loc,
                    "unknown type '" SV_FMT "'", SV_ARG(node->type_name));
@@ -171,12 +219,12 @@ static bool tc_var_decl(AstVarDecl *node, Context *ctx) {
     }
 
     node->type = declared_type;
-    if (!scope_declare(ctx, node->name, declared_type)) return false;
+    if (!scope_declare(ctx, node->name, declared_type, node->mutable_)) return false;
     return true;
 }
 
 static bool tc_function_decl(AstFunctionDecl *node, Context *ctx) {
-    Type *ret = type_from_sv(node->return_type_name);
+    Type *ret = resolve_type(ctx, node->return_type_name);
     if (!ret) TC_ERR(ctx, node->loc,
                      "unknown return type '" SV_FMT "'", SV_ARG(node->return_type_name));
 
@@ -186,10 +234,10 @@ static bool tc_function_decl(AstFunctionDecl *node, Context *ctx) {
     // Declare parameters in the function's scope
     for (size_t i = 0; i < node->params.len; i++) {
         Param *p = &node->params.data[i];
-        Type *pt = type_from_sv(p->type_name);
+        Type *pt = resolve_type(ctx, p->type_name);
         if (!pt) TC_ERR(ctx, p->loc,
                         "unknown parameter type '" SV_FMT "'", SV_ARG(p->type_name));
-        if (!scope_declare(ctx, p->name, pt)) return false;
+        if (!scope_declare(ctx, p->name, pt, p->mutable_)) return false;
     }
 
     bool ok = tc_node(node->body, ctx);
@@ -201,11 +249,11 @@ static bool tc_function_decl(AstFunctionDecl *node, Context *ctx) {
 static bool tc_extern_function_decl(AstExternFunctionDecl *node, Context *ctx) {
     // Already hoisted in the first pass of tc_program.
     // Validate types are known.
-    if (!type_from_sv(node->return_type_name))
+    if (!resolve_type(ctx, node->return_type_name))
         TC_ERR(ctx, node->loc,
                "unknown return type '" SV_FMT "'", SV_ARG(node->return_type_name));
     for (size_t i = 0; i < node->params.len; i++) {
-        if (!type_from_sv(node->params.data[i].type_name))
+        if (!resolve_type(ctx, node->params.data[i].type_name))
             TC_ERR(ctx, node->params.data[i].loc,
                    "unknown parameter type '" SV_FMT "'",
                    SV_ARG(node->params.data[i].type_name));
@@ -289,7 +337,12 @@ static bool tc_identifier(AstIdentifier *node, Context *ctx) {
 }
 
 static bool tc_numeric_literal(AstNumericLiteral *node, Context * /*ctx*/) {
-    node->type = TY_I64;
+    // If the raw value contains a dot, it's a float literal → default to f64
+    bool is_float = false;
+    for (size_t i = 0; i < node->raw.len; i++) {
+        if (node->raw.data[i] == '.') { is_float = true; break; }
+    }
+    node->type = is_float ? TY_F64 : TY_I64;
     return true;
 }
 
@@ -386,6 +439,22 @@ static bool tc_call_expr(AstCallExpr *node, Context *ctx) {
                        i + 1,
                        type_to_string(arg, ctx->arena),
                        type_to_string(param, ctx->arena));
+
+            // mut parameter check: can only pass a let mut variable to a mut param
+            bool param_is_mut = i < callee_type->function.mut_params.len &&
+                                 callee_type->function.mut_params.data[i];
+            if (param_is_mut) {
+                Node *arg_node = node->args.data[i];
+                if (arg_node->kind != NK_IDENTIFIER)
+                    TC_ERR(ctx, arg_node->loc,
+                           "argument %zu: cannot pass a non-variable expression to a mut parameter",
+                           i + 1);
+                AstIdentifier *id = (AstIdentifier *)arg_node;
+                if (!scope_is_mutable(ctx, id->name))
+                    TC_ERR(ctx, arg_node->loc,
+                           "argument %zu: cannot pass immutable variable '" SV_FMT "' to mut parameter",
+                           i + 1, SV_ARG(id->name));
+            }
         }
 
         node->type = callee_type->function.ret;
@@ -431,12 +500,85 @@ static bool tc_call_expr(AstCallExpr *node, Context *ctx) {
            type_to_string(callee_type, ctx->arena));
 }
 
+static bool tc_struct_decl(AstStructDecl *node, Context *ctx) {
+    // Already hoisted in the first pass of tc_program; type is on node->type.
+    // Second pass: validate that all field types are known (already done in hoist).
+    // Nothing more to do here — just succeed.
+    return true;
+}
+
+static bool tc_struct_literal(AstStructLiteral *node, Context *ctx) {
+    // Look up the struct type
+    Type *struct_type = scope_lookup(ctx, node->struct_name);
+    if (!struct_type)
+        TC_ERR(ctx, node->loc, "unknown struct '" SV_FMT "'", SV_ARG(node->struct_name));
+    if (struct_type->kind != TY_STRUCT)
+        TC_ERR(ctx, node->loc, "'" SV_FMT "' is not a struct", SV_ARG(node->struct_name));
+
+    size_t num_fields = struct_type->struct_.fields.len;
+
+    // Check we got exactly the right number of fields
+    if (node->fields.len != num_fields)
+        TC_ERR(ctx, node->loc,
+               "struct '" SV_FMT "' has %zu field(s) but %zu were provided",
+               SV_ARG(node->struct_name), num_fields, node->fields.len);
+
+    // Check each provided field — name must exist, type must match, no duplicates
+    bool seen[64] = {false}; // support up to 64 fields without heap allocation
+    for (size_t i = 0; i < node->fields.len; i++) {
+        StructInit *init = &node->fields.data[i];
+        int idx = struct_field_index(struct_type, init->name);
+        if (idx < 0)
+            TC_ERR(ctx, init->loc,
+                   "struct '" SV_FMT "' has no field '" SV_FMT "'",
+                   SV_ARG(node->struct_name), SV_ARG(init->name));
+        if (seen[idx])
+            TC_ERR(ctx, init->loc,
+                   "field '" SV_FMT "' provided more than once",
+                   SV_ARG(init->name));
+        seen[idx] = true;
+
+        if (!tc_node(init->value, ctx)) return false;
+
+        Type *expected = struct_field_type(struct_type, idx);
+        if (!is_assignable(expected, init->value->type))
+            TC_ERR(ctx, init->loc,
+                   "field '" SV_FMT "': cannot assign '%s' to '%s'",
+                   SV_ARG(init->name),
+                   type_to_string(init->value->type, ctx->arena),
+                   type_to_string(expected, ctx->arena));
+    }
+
+    node->type = struct_type;
+    return true;
+}
+
+static bool tc_field_access(AstFieldAccess *node, Context *ctx) {
+    if (!tc_node(node->object, ctx)) return false;
+
+    Type *obj_type = node->object->type;
+    if (!obj_type || obj_type->kind != TY_STRUCT)
+        TC_ERR(ctx, node->loc,
+               "cannot access field '" SV_FMT "' on non-struct type '%s'",
+               SV_ARG(node->field),
+               type_to_string(obj_type, ctx->arena));
+
+    int idx = struct_field_index(obj_type, node->field);
+    if (idx < 0)
+        TC_ERR(ctx, node->loc,
+               "struct '" SV_FMT "' has no field '" SV_FMT "'",
+               SV_ARG(obj_type->struct_.name), SV_ARG(node->field));
+
+    node->type = struct_field_type(obj_type, idx);
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
 
 static bool tc_node(Node *node, Context *ctx) {
-    static_assert(NK_COUNT == 17, "tc_node: NodeKind changed, update this switch");
+    static_assert(NK_COUNT == 20, "tc_node: NodeKind changed, update this switch");
 
     if (!node) {
         snprintf(ctx->errbuf, sizeof(ctx->errbuf), "internal: NULL node passed to tc_node");
@@ -454,7 +596,9 @@ static bool tc_node(Node *node, Context *ctx) {
         case NK_WHILE:                return tc_while((AstWhile *)node, ctx);
         case NK_BREAK:                return tc_break(node, ctx);
         case NK_CONTINUE:             return tc_continue(node, ctx);
-        case NK_IDENTIFIER:           return tc_identifier((AstIdentifier *)node, ctx);
+        case NK_STRUCT_DECL:          return tc_struct_decl((AstStructDecl *)node, ctx);
+        case NK_STRUCT_LITERAL:       return tc_struct_literal((AstStructLiteral *)node, ctx);
+        case NK_FIELD_ACCESS:         return tc_field_access((AstFieldAccess *)node, ctx);        case NK_IDENTIFIER:           return tc_identifier((AstIdentifier *)node, ctx);
         case NK_NUMERIC_LITERAL:      return tc_numeric_literal((AstNumericLiteral *)node, ctx);
         case NK_STRING_LITERAL:       return tc_string_literal((AstStringLiteral *)node, ctx);
         case NK_BOOLEAN_LITERAL:      return tc_boolean_literal((AstBooleanLiteral *)node, ctx);

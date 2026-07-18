@@ -72,7 +72,7 @@ Type *TY_F64  = &s_f64;
 // ---------------------------------------------------------------------------
 
 const char *type_kind_name(TypeKind kind) {
-    static_assert(TY_COUNT == 7, "type_kind_name: TypeKind changed, update this switch");
+    static_assert(TY_COUNT == 8, "type_kind_name: TypeKind changed, update this switch");
     switch (kind) {
         case TY_INT:          return "int";
         case TY_FLOAT:        return "float";
@@ -81,6 +81,7 @@ const char *type_kind_name(TypeKind kind) {
         case TY_PTR:          return "ptr";
         case TY_FUNCTION:     return "function";
         case TY_EXT_FUNCTION: return "ext_function";
+        case TY_STRUCT:       return "struct";
         case TY_COUNT:        break;
     }
     return "<unknown>";
@@ -126,7 +127,7 @@ Type *type_from_cstr(const char *name) {
 // ---------------------------------------------------------------------------
 
 const char *type_to_string(const Type *type, Arena *arena) {
-    static_assert(TY_COUNT == 7, "type_to_string: TypeKind changed, update this switch");
+    static_assert(TY_COUNT == 8, "type_to_string: TypeKind changed, update this switch");
 
     if (!type) return "<null>";
 
@@ -186,6 +187,9 @@ const char *type_to_string(const Type *type, Arena *arena) {
             return arena_copy_str(arena, buf, strlen(buf));
         }
 
+        case TY_STRUCT:
+            return arena_copy_str(arena, type->struct_.name.data, type->struct_.name.len);
+
         case TY_COUNT: break;
     }
     return "<unknown>";
@@ -200,7 +204,7 @@ bool types_equal(const Type *a, const Type *b) {
     if (!a || !b) return false;
     if (a->kind != b->kind) return false;
 
-    static_assert(TY_COUNT == 7, "types_equal: TypeKind changed, update this switch");
+    static_assert(TY_COUNT == 8, "types_equal: TypeKind changed, update this switch");
 
     switch (a->kind) {
         case TY_BOOL:
@@ -218,6 +222,9 @@ bool types_equal(const Type *a, const Type *b) {
             for (size_t i = 0; i < a->function.params.len; i++) {
                 if (!types_equal(a->function.params.data[i], b->function.params.data[i]))
                     return false;
+                bool a_mut = i < a->function.mut_params.len && a->function.mut_params.data[i];
+                bool b_mut = i < b->function.mut_params.len && b->function.mut_params.data[i];
+                if (a_mut != b_mut) return false;
             }
             return true;
         }
@@ -231,6 +238,9 @@ bool types_equal(const Type *a, const Type *b) {
             }
             return true;
         }
+        case TY_STRUCT:
+            // Struct identity is by name (nominal typing)
+            return sv_eq(a->struct_.name, b->struct_.name);
         case TY_COUNT: break;
     }
     return false;
@@ -316,11 +326,12 @@ bool is_assignable(const Type *target, const Type *value) {
 // make_function_type / make_ext_function_type
 // ---------------------------------------------------------------------------
 
-Type *make_function_type(Arena *arena, TypeList params, Type *ret) {
+Type *make_function_type(Arena *arena, TypeList params, BoolList mut_params, Type *ret) {
     Type *t = arena_alloc_t(arena, Type);
-    t->kind             = TY_FUNCTION;
-    t->function.params  = params;
-    t->function.ret     = ret;
+    t->kind                   = TY_FUNCTION;
+    t->function.params        = params;
+    t->function.mut_params    = mut_params;
+    t->function.ret           = ret;
     return t;
 }
 
@@ -331,4 +342,24 @@ Type *make_ext_function_type(Arena *arena, TypeList params, Type *ret, bool vari
     t->ext_function.ret      = ret;
     t->ext_function.variadic = variadic;
     return t;
+}
+
+Type *make_struct_type(Arena *arena, SV name, StructTypeFieldList fields) {
+    Type *t = arena_alloc_t(arena, Type);
+    t->kind           = TY_STRUCT;
+    t->struct_.name   = name;
+    t->struct_.fields = fields;
+    return t;
+}
+
+int struct_field_index(const Type *t, SV field_name) {
+    for (size_t i = 0; i < t->struct_.fields.len; i++) {
+        if (sv_eq(t->struct_.fields.data[i].name, field_name))
+            return (int)i;
+    }
+    return -1;
+}
+
+Type *struct_field_type(const Type *t, int index) {
+    return t->struct_.fields.data[index].type;
 }

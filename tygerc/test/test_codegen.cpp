@@ -217,6 +217,48 @@ static void test_while_continue() {
     ));
 }
 
+static void test_struct_field_read() {
+    ASSERT(compile_and_run(
+        "extern fn printf(fmt: ptr, ...) -> i32;\n"
+        "struct Point { x: f64; y: f64; }\n"
+        "fn main() -> i32 {\n"
+        "  let p = Point{x=3.0, y=4.0};\n"
+        "  printf(\"%g %g\\n\", p.x, p.y);\n"
+        "}\n",
+        "3 4\n"
+    ));
+}
+
+static void test_struct_passed_to_function() {
+    ASSERT(compile_and_run(
+        "extern fn printf(fmt: ptr, ...) -> i32;\n"
+        "struct Point { x: f64; y: f64; }\n"
+        "fn print_point(p: Point) -> i64 {\n"
+        "  printf(\"%g %g\\n\", p.x, p.y);\n"
+        "  return 0;\n"
+        "}\n"
+        "fn main() -> i32 {\n"
+        "  let p = Point{x=1.0, y=2.0};\n"
+        "  print_point(p);\n"
+        "}\n",
+        "1 2\n"
+    ));
+}
+
+static void test_struct_mut_param_modifies_original() {
+    ASSERT(compile_and_run(
+        "extern fn printf(fmt: ptr, ...) -> i32;\n"
+        "struct Point { x: f64; y: f64; }\n"
+        "fn zero_x(mut p: Point) -> i64 { return 0; }\n"
+        "fn main() -> i32 {\n"
+        "  let mut p = Point{x=5.0, y=9.0};\n"
+        "  zero_x(p);\n"
+        "  printf(\"%g %g\\n\", p.x, p.y);\n"
+        "}\n",
+        "5 9\n"
+    ));
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -236,6 +278,11 @@ int main(void) {
     RUN_TEST(test_while_loop);
     RUN_TEST(test_while_break);
     RUN_TEST(test_while_continue);
+
+    printf("\n=== Struct tests ===\n");
+    RUN_TEST(test_struct_field_read);
+    RUN_TEST(test_struct_passed_to_function);
+    RUN_TEST(test_struct_mut_param_modifies_original);
 
     arena_free(&g_arena);
     return TEST_RESULTS();

@@ -1,0 +1,17 @@
+extern fn printf(format: ptr, ...) -> i32;
+
+struct Point {
+  x: f64;
+  y: f64;
+}
+
+fn print_point(p: Point) -> i64 {
+  printf("(%g, %g)", p.x, p.y);
+  return 0;
+}
+
+fn main() -> i32 {
+  let p = Point{x=1.2, y=3.14};
+  print_point(p);
+  printf("\n");
+}
