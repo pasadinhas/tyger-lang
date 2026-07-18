@@ -227,8 +227,53 @@ static void test_multi_token_source() {
 }
 
 // ---------------------------------------------------------------------------
-// Error cases
+// Location tests
 // ---------------------------------------------------------------------------
+
+static void test_loc_first_token() {
+    TokenList tokens = must_lex("let");
+    ASSERT_EQ(1u, tokens.data[0].loc.line);
+    ASSERT_EQ(1u, tokens.data[0].loc.col);
+    da_free(&tokens);
+}
+
+static void test_loc_second_token_same_line() {
+    TokenList tokens = must_lex("let x");
+    // "let" starts at col 1, "x" starts at col 5
+    ASSERT_EQ(1u, tokens.data[0].loc.line);
+    ASSERT_EQ(1u, tokens.data[0].loc.col);
+    ASSERT_EQ(1u, tokens.data[1].loc.line);
+    ASSERT_EQ(5u, tokens.data[1].loc.col);
+    da_free(&tokens);
+}
+
+static void test_loc_newline_resets_col() {
+    TokenList tokens = must_lex("let\nx");
+    ASSERT_EQ(1u, tokens.data[0].loc.line);
+    ASSERT_EQ(1u, tokens.data[0].loc.col);
+    ASSERT_EQ(2u, tokens.data[1].loc.line);
+    ASSERT_EQ(1u, tokens.data[1].loc.col);
+    da_free(&tokens);
+}
+
+static void test_loc_multiple_lines() {
+    TokenList tokens = must_lex("let x = 1;\nlet y = 2;");
+    // "let" on line 1
+    ASSERT_EQ(1u, tokens.data[0].loc.line);
+    ASSERT_EQ(1u, tokens.data[0].loc.col);
+    // second "let" on line 2
+    ASSERT_EQ(2u, tokens.data[5].loc.line);
+    ASSERT_EQ(1u, tokens.data[5].loc.col);
+    da_free(&tokens);
+}
+
+static void test_loc_eof() {
+    TokenList tokens = must_lex("x");
+    // EOF follows after "x" (1 char), so col 2
+    ASSERT_EQ(1u, tokens.data[1].loc.line);
+    ASSERT_EQ(2u, tokens.data[1].loc.col);
+    da_free(&tokens);
+}
 
 static void test_error_unexpected_char() {
     LexResult r = lex(sv_from_cstr("@"), &g_arena);
@@ -310,6 +355,13 @@ int main(void) {
 
     printf("\n=== Multi-token source test ===\n");
     RUN_TEST(test_multi_token_source);
+
+    printf("\n=== Location tests ===\n");
+    RUN_TEST(test_loc_first_token);
+    RUN_TEST(test_loc_second_token_same_line);
+    RUN_TEST(test_loc_newline_resets_col);
+    RUN_TEST(test_loc_multiple_lines);
+    RUN_TEST(test_loc_eof);
 
     printf("\n=== Error tests ===\n");
     RUN_TEST(test_error_unexpected_char);

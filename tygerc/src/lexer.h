@@ -5,6 +5,15 @@
 #include "arena.h"
 
 // ---------------------------------------------------------------------------
+// Source location
+// ---------------------------------------------------------------------------
+
+typedef struct {
+    uint32_t line;   // 1-based
+    uint32_t col;    // 1-based
+} Loc;
+
+// ---------------------------------------------------------------------------
 // Token types
 // ---------------------------------------------------------------------------
 
@@ -71,10 +80,8 @@ const char *token_type_name(TokenType type);
 
 typedef struct {
     TokenType type;
-    // For TK_IDENTIFIER, TK_NUMBER: a view into the original source buffer.
-    // For TK_STRING: arena-allocated (escapes already resolved, null-terminated).
-    // For keywords/operators: empty (value is implicit from type).
-    SV value;
+    SV        value;
+    Loc       loc;
 } Token;
 
 // ---------------------------------------------------------------------------

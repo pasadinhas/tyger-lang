@@ -63,6 +63,8 @@ typedef struct {
     const char *start;   // start of the source buffer
     const char *cur;     // current position
     const char *end;     // one past the last character
+    uint32_t    line;    // current line (1-based)
+    uint32_t    col;     // current column (1-based)
     Arena      *arena;
     char        errbuf[256];
 } Lexer;
@@ -73,7 +75,22 @@ static inline char peek(const Lexer *l, int offset) {
 }
 
 static inline void advance(Lexer *l, int n) {
-    l->cur += n;
+    for (int i = 0; i < n; i++) {
+        if (l->cur < l->end && *l->cur == '\n') {
+            l->line++;
+            l->col = 1;
+        } else {
+            l->col++;
+        }
+        l->cur++;
+    }
+}
+
+static inline Loc current_loc(const Lexer *l) {
+    Loc loc;
+    loc.line = l->line;
+    loc.col  = l->col;
+    return loc;
 }
 
 static inline bool at_end(const Lexer *l) {
@@ -206,11 +223,14 @@ LexResult lex(SV source, Arena *arena) {
     result.tokens.cap  = 0;
     result.error       = NULL;
 
-    Lexer l = {0};
-    l.start = source.data;
-    l.cur   = source.data;
-    l.end   = source.data + source.len;
-    l.arena = arena;
+    Lexer l;
+    l.start    = source.data;
+    l.cur      = source.data;
+    l.end      = source.data + source.len;
+    l.line     = 1;
+    l.col      = 1;
+    l.arena    = arena;
+    l.errbuf[0] = '\0';
 
     while (!at_end(&l)) {
         // Skip whitespace
@@ -228,9 +248,11 @@ LexResult lex(SV source, Arena *arena) {
         // If TK_COUNT changes, update the matcher chain below.
         static_assert(TK_COUNT == 39, "lex: token list changed, update the matcher chain");
 
+        Loc tok_loc = current_loc(&l);
         Token tok;
-        tok.type  = TK_EOF; // placeholder, overwritten by matchers
+        tok.type  = TK_EOF;
         tok.value = sv_from_parts(l.cur, 0);
+        tok.loc   = tok_loc;
         bool matched = false;
 
         // Keywords (must be tried before identifiers)
@@ -298,6 +320,7 @@ LexResult lex(SV source, Arena *arena) {
     Token eof_tok;
     eof_tok.type  = TK_EOF;
     eof_tok.value = sv_from_parts(l.cur, 0);
+    eof_tok.loc   = current_loc(&l);
     da_push(&result.tokens, eof_tok);
 
     return result;
